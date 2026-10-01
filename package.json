@@ -1,0 +1,25 @@
+{
+  "name": "@sdd/cli",
+  "version": "1.0.0",
+  "description": "Spec-Driven Development (SDD) Studio & CLI - Local workbench for human-agent software engineering",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "sdd": "./bin/sdd.js"
+  },
+  "keywords": [
+    "sdd",
+    "spec-driven-development",
+    "ai-agents",
+    "specifications",
+    "architecture",
+    "cursor",
+    "antigravity",
+    "claude-code"
+  ],
+  "author": "SDD Core Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

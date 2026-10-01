@@ -1,0 +1,986 @@
+import http from 'http'
+import fs from 'fs'
+import path from 'path'
+import os from 'os'
+import net from 'net'
+import { fileURLToPath } from 'url'
+import { exec, execSync } from 'child_process'
+import { scanProject, scanProjectViews } from './scanner.js'
+import { scaffoldGenesis, processGenesisChat } from './genesis.js'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const UI_DIR = path.join(__dirname, '..', 'ui')
+
+const MIME_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.mjs': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.ico': 'image/x-icon'
+}
+
+function readJsonFile(filePath, fallback = null) {
+  try {
+    if (!fs.existsSync(filePath)) return fallback
+    return JSON.parse(fs.readFileSync(filePath, 'utf-8'))
+  } catch {
+    return fallback
+  }
+}
+
+function writeJsonFile(filePath, data) {
+  try {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true })
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8')
+    return true
+  } catch (err) {
+    console.error('Error writing file:', filePath, err)
+    return false
+  }
+}
+
+function mergeDetectedScreens(detected, existing) {
+  if (!Array.isArray(detected) || detected.length === 0) return existing || []
+  if (!Array.isArray(existing) || existing.length === 0) return detected
+
+  const existingByRoute = new Map()
+  const existingByFile = new Map()
+  existing.forEach(s => {
+    if (s.route) existingByRoute.set(s.route, s)
+    if (s.file || s.filePath || s.sourceFile) {
+      existingByFile.set(s.file || s.filePath || s.sourceFile, s)
+    }
+  })
+
+  const merged = detected.map(d => {
+    const prev = existingByRoute.get(d.route) || existingByFile.get(d.file)
+    if (prev) {
+      return {
+        ...d,
+        name: prev.name || d.name,
+        wireframeDescription: prev.wireframeDescription || d.wireframeDescription,
+        checklist: prev.checklist && prev.checklist.length > 0 ? prev.checklist : d.checklist,
+        layout: prev.layout || d.layout,
+        status: prev.status || d.status,
+        healthPercent: prev.healthPercent !== undefined ? prev.healthPercent : d.healthPercent
+      }
+    }
+    return d
+  })
+
+  const detectedRoutes = new Set(detected.map(d => d.route))
+  existing.forEach(s => {
+    if (s.route && !detectedRoutes.has(s.route) && !s.file) {
+      merged.push(s)
+    }
+  })
+
+  return merged
+}
+
+function loadEnvVariables(projectRoot) {
+  const env = {}
+  const files = ['.env', '.env.local', '.env.development']
+  for (const f of files) {
+    const p = path.join(projectRoot, f)
+    if (fs.existsSync(p)) {
+      try {
+        const lines = fs.readFileSync(p, 'utf-8').split('\n')
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed || trimmed.startsWith('#')) continue
+          const eqIdx = trimmed.indexOf('=')
+          if (eqIdx !== -1) {
+            const key = trimmed.slice(0, eqIdx).trim()
+            let val = trimmed.slice(eqIdx + 1).trim()
+            if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+              val = val.slice(1, -1)
+            }
+            if (!env[key]) env[key] = val
+          }
+        }
+      } catch {}
+    }
+  }
+  return env
+}
+
+const OPENROUTER_FREE_MODELS = [
+  { id: 'inclusionai/ling-3.0-flash-sante:free', name: 'Ling 3.0 Flash (Recomendado)', provider: 'inclusionAI', context: '262k', badge: '100% Gratis', recommended: true },
+  { id: 'openrouter/free', name: 'OpenRouter Free Auto-Router', provider: 'OpenRouter', context: '200k', badge: '100% Gratis' },
+  { id: 'liquid/lfm-2.5-2.6b:free', name: 'LiquidAI LFM 2.5', provider: 'LiquidAI', context: '64k', badge: '100% Gratis' },
+  { id: 'dots-studio/dots-3-note-preview:free', name: 'Dots Studio 3 Note', provider: 'Dots', context: '512k', badge: '100% Gratis' }
+]
+
+function getGlobalConfigFile() {
+  return path.join(os.homedir(), '.sdd', 'config.json')
+}
+
+function getOpenRouterConfig(projectRoot) {
+  const configFile = path.join(projectRoot, '.sdd', 'config.json')
+  const diskConfig = readJsonFile(configFile, {})
+  const globalConfig = readJsonFile(getGlobalConfigFile(), {})
+  const fileEnv = loadEnvVariables(projectRoot)
+
+  const apiKey = diskConfig.openrouterApiKey || globalConfig.openrouterApiKey || process.env.OPENROUTER_API_KEY || fileEnv.OPENROUTER_API_KEY || ''
+  const defaultModel = diskConfig.openrouterModel || globalConfig.openrouterModel || process.env.OPENROUTER_MODEL || 'inclusionai/ling-3.0-flash-sante:free'
+
+  return {
+    configured: Boolean(apiKey),
+    apiKey,
+    keyMasked: apiKey ? `${apiKey.slice(0, 8)}...${apiKey.slice(-4)}` : null,
+    defaultModel,
+    freeModels: OPENROUTER_FREE_MODELS
+  }
+}
+
+function getDriftReport(projectRoot) {
+  const sddDir = path.join(projectRoot, '.sdd')
+  const flowsDir = path.join(sddDir, 'flows')
+  const storiesDir = path.join(sddDir, 'requirements', 'stories')
+
+  try {
+    const declared = new Set()
+    if (fs.existsSync(flowsDir)) {
+      const flowFiles = fs.readdirSync(flowsDir).filter(f => f.endsWith('.json'))
+      for (const f of flowFiles) {
+        const flow = readJsonFile(path.join(flowsDir, f))
+        flow?.nodes?.forEach(n => n.scopeFiles?.forEach(file => declared.add(file.replace(/\\/g, '/'))))
+      }
+    }
+    if (fs.existsSync(storiesDir)) {
+      const storyFiles = fs.readdirSync(storiesDir).filter(f => f.endsWith('.json'))
+      for (const f of storyFiles) {
+        const story = readJsonFile(path.join(storiesDir, f))
+        story?.scopeFiles?.forEach(file => declared.add(file.replace(/\\/g, '/')))
+      }
+    }
+
+    let modified = []
+    try {
+      const output = execSync('git status --porcelain', { cwd: projectRoot, encoding: 'utf-8', timeout: 3000 })
+      const lines = output.split('\n').filter(Boolean)
+      for (const line of lines) {
+        const match = line.trim().match(/^([MADRCU?]+)\s+(.+)$/)
+        if (match) {
+          let fp = match[2].trim().replace(/\\/g, '/')
+          if (fp.startsWith('"') && fp.endsWith('"')) fp = fp.slice(1, -1)
+          if (!fp.startsWith('.sdd/') && !fp.startsWith('.git') && fp !== 'AGENTS.md') {
+            modified.push(fp)
+          }
+        }
+      }
+    } catch {
+      // Git command might fail if not a git repo
+    }
+
+    const inScope = []
+    const outOfScope = []
+    for (const file of modified) {
+      const isDeclared = Array.from(declared).some(d => file.startsWith(d) || d.startsWith(file))
+      if (isDeclared) inScope.push(file)
+      else outOfScope.push(file)
+    }
+
+    const driftScore = modified.length === 0 ? 100 : Math.round((inScope.length / (inScope.length + outOfScope.length)) * 100)
+    return {
+      driftScore,
+      isClean: outOfScope.length === 0,
+      totalModified: modified.length,
+      inScope,
+      outOfScope,
+      declaredCount: declared.size
+    }
+  } catch (err) {
+    return { driftScore: 100, isClean: true, totalModified: 0, inScope: [], outOfScope: [], declaredCount: 0, error: err.message }
+  }
+}
+
+export function createSddServer(projectRoot = process.cwd(), port = 3030) {
+  const sddDir = path.join(projectRoot, '.sdd')
+  const coreDir = path.join(sddDir, 'core')
+  const discoveryDir = path.join(sddDir, 'discovery')
+  const reqDir = path.join(sddDir, 'requirements')
+  const storiesDir = path.join(reqDir, 'stories')
+  const flowsDir = path.join(sddDir, 'flows')
+  const dbDir = path.join(sddDir, 'database')
+  const qaDir = path.join(sddDir, 'qa')
+  const seqDir = path.join(sddDir, 'sequences')
+  const uiDir = path.join(sddDir, 'ui-ux')
+
+  const server = http.createServer(async (req, res) => {
+    // CORS headers for local tools
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204)
+      res.end()
+      return
+    }
+
+    const url = new URL(req.url, `http://${req.headers.host}`)
+
+    // 1. API GET /api/sdd
+    if (url.pathname === '/api/sdd' && req.method === 'GET') {
+      try {
+        const project = readJsonFile(path.join(sddDir, 'project.json'), {
+          name: path.basename(projectRoot),
+          purpose: 'comercial',
+          depth: 'serio',
+          qualityGates: []
+        })
+
+        const problem = readJsonFile(path.join(coreDir, 'problem.json'), {})
+        const targetUsers = readJsonFile(path.join(coreDir, 'target-user.json'), {})
+        const scopeBoundaries = readJsonFile(path.join(coreDir, 'scope-boundaries.json'), { inScopeV1: [], explicitNonGoals: [] })
+        const successCriteria = readJsonFile(path.join(coreDir, 'success-criteria.json'), {})
+        const risks = readJsonFile(path.join(coreDir, 'risks.json'), {})
+
+        const interviews = readJsonFile(path.join(discoveryDir, 'interviews.json'), { interviewSessions: [] })
+        const hypotheses = readJsonFile(path.join(discoveryDir, 'hypotheses.json'), {})
+        const competitors = readJsonFile(path.join(discoveryDir, 'competitive-matrix.json'), {})
+
+        let userStories = []
+        if (fs.existsSync(storiesDir)) {
+          const files = fs.readdirSync(storiesDir).filter(f => f.endsWith('.json'))
+          userStories = files.map(f => readJsonFile(path.join(storiesDir, f))).filter(Boolean)
+        }
+        if (userStories.length === 0) {
+          userStories = readJsonFile(path.join(reqDir, 'user-stories.json'), [])
+        }
+
+        const epics = readJsonFile(path.join(reqDir, 'epics.json'), [])
+        const useCases = readJsonFile(path.join(reqDir, 'use-cases.json'), [])
+        const rolesMatrix = readJsonFile(path.join(reqDir, 'roles-matrix.json'), {})
+
+        let flows = []
+        if (fs.existsSync(flowsDir)) {
+          const files = fs.readdirSync(flowsDir).filter(f => f.endsWith('.json'))
+          flows = files.map(f => readJsonFile(path.join(flowsDir, f))).filter(Boolean)
+        }
+
+        const architecture = readJsonFile(path.join(sddDir, 'architecture.json'), { services: [] })
+        const database = readJsonFile(path.join(dbDir, 'schema-erd.json'), {})
+        const testPlan = readJsonFile(path.join(qaDir, 'test-plan.json'), {})
+        // Carga y normalización de Secuencias UML vinculadas a Flujos
+        let sequences = []
+        const seqJsonPath = path.join(seqDir, 'sequences.json')
+        if (fs.existsSync(seqJsonPath)) {
+          const loaded = readJsonFile(seqJsonPath, [])
+          sequences = Array.isArray(loaded) ? loaded : [loaded]
+        } else if (fs.existsSync(path.join(seqDir, 'checkout-flow.json'))) {
+          const loaded = readJsonFile(path.join(seqDir, 'checkout-flow.json'), {})
+          sequences = Array.isArray(loaded) ? loaded : (loaded && Object.keys(loaded).length > 0 ? [loaded] : [])
+        } else if (fs.existsSync(seqDir)) {
+          const files = fs.readdirSync(seqDir).filter(f => f.endsWith('.json') && !f.includes('state-machine'))
+          for (const f of files) {
+            const loaded = readJsonFile(path.join(seqDir, f))
+            if (Array.isArray(loaded)) sequences.push(...loaded)
+            else if (loaded && (loaded.mermaid || loaded.steps || loaded.name)) sequences.push(loaded)
+          }
+        }
+
+        // Si existen flujos sin secuencia explícita, autogenerar secuencia técnica interactiva
+        flows.forEach((fl, idx) => {
+          const hasSeq = sequences.some(s => s.flowId === fl.id || (s.id && s.id.toLowerCase() === fl.id.toLowerCase()))
+          if (!hasSeq && fl.nodes && fl.nodes.length > 0) {
+            const steps = []
+            let mermaid = `sequenceDiagram\n    autonumber\n    actor U as 👤 Usuario\n    participant API as ⚡ Core API\n    participant DB as 🐘 Base de Datos\n`
+            fl.nodes.forEach((n, i) => {
+              steps.push({
+                from: i === 0 ? '👤 Usuario' : '⚡ Core API',
+                to: n.name.toLowerCase().includes('database') || n.name.toLowerCase().includes('prisma') ? '🐘 Base de Datos' : '⚡ Core API',
+                action: n.agentPrompt || n.name,
+                type: 'sync'
+              })
+              if (i === 0) {
+                mermaid += `    U->>API: Inicia ${n.name}\n`
+              } else {
+                mermaid += `    API->>DB: Ejecuta nodo ${n.name}\n    DB-->>API: Confirmación de datos\n`
+              }
+            })
+            mermaid += `    API-->>U: Operación confirmada con éxito\n`
+
+            sequences.push({
+              id: `SEQ-0${sequences.length + 1}`,
+              flowId: fl.id,
+              name: `Secuencia: ${fl.name}`,
+              description: fl.description || `Protocolo de interacción para el flujo ${fl.name}.`,
+              mermaid,
+              actors: ['👤 Usuario', '⚡ Core API', '🐘 Base de Datos'],
+              steps
+            })
+          }
+        })
+
+        // Carga de Diagramas de Máquinas de Estado UML (FSM)
+        let stateMachines = []
+        const fsmPath = path.join(seqDir, 'state-machines.json')
+        if (fs.existsSync(fsmPath)) {
+          const loaded = readJsonFile(fsmPath, [])
+          stateMachines = Array.isArray(loaded) ? loaded : [loaded]
+        } else if (fs.existsSync(path.join(dbDir, 'state-machines.json'))) {
+          const loaded = readJsonFile(path.join(dbDir, 'state-machines.json'), [])
+          stateMachines = Array.isArray(loaded) ? loaded : [loaded]
+        }
+
+        let screens = readJsonFile(path.join(uiDir, 'screens.json'), [])
+        const detected = scanProjectViews(projectRoot)
+        if (detected && detected.length > 0) {
+          const existingRoutes = new Set((Array.isArray(screens) ? screens : []).map(s => s.route))
+          const hasMissingViews = detected.some(d => !existingRoutes.has(d.route))
+          if (!Array.isArray(screens) || screens.length === 0 || hasMissingViews) {
+            screens = mergeDetectedScreens(detected, Array.isArray(screens) ? screens : [])
+            writeJsonFile(path.join(uiDir, 'screens.json'), screens)
+          }
+        }
+
+        const drift = getDriftReport(projectRoot)
+
+        const taskFile = path.join(sddDir, 'genesis_task.json')
+        const genesisTask = fs.existsSync(taskFile) ? readJsonFile(taskFile) : null
+
+        const isNewProject = !fs.existsSync(path.join(sddDir, 'project.json')) || userStories.length === 0
+
+        const payload = {
+          isNewProject,
+          workspaceName: path.basename(projectRoot),
+          workspacePath: projectRoot,
+          project,
+          genesisTask,
+          core: { problem, targetUsers, scopeBoundaries, successCriteria, risks },
+          discovery: { interviews, hypotheses, competitors },
+          manifest: {
+            metrics: { globalHealth: 100, flowsHealth: 100, totalFlows: flows.length },
+            flowsSummary: flows.map(f => ({ id: f.id, name: f.name, priority: f.priority, progress: f.progress || 0 }))
+          },
+          architecture,
+          flows,
+          requirements: { epics, userStories, useCases, rolesMatrix },
+          database,
+          testPlan,
+          sequences,
+          stateMachines,
+          uiUx: { screens },
+          drift
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify(payload))
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: err.message }))
+      }
+      return
+    }
+
+    // 2. API PATCH /api/sdd
+    if (url.pathname === '/api/sdd' && req.method === 'PATCH') {
+      let bodyData = ''
+      req.on('data', chunk => { bodyData += chunk })
+      req.on('end', () => {
+        try {
+          const body = JSON.parse(bodyData)
+
+          // 2.1 Mutar Pregunta de Discovery
+          if (body.questionId) {
+            const intFile = path.join(discoveryDir, 'interviews.json')
+            const data = readJsonFile(intFile, { interviewSessions: [] })
+            let found = false
+            for (const sess of (data.interviewSessions || [])) {
+              const q = sess.questions?.find(item => item.id === body.questionId)
+              if (q) {
+                if (body.answer !== undefined) q.answer = body.answer
+                if (body.status !== undefined) q.status = body.status
+                if (body.isNotApplicable !== undefined) q.isNotApplicable = Boolean(body.isNotApplicable)
+                if (body.notApplicableReason !== undefined) q.notApplicableReason = body.notApplicableReason
+                found = true
+                break
+              }
+            }
+            if (found) {
+              data.lastUpdated = new Date().toISOString()
+              writeJsonFile(intFile, data)
+
+              // Sincronización bidireccional inteligente hacia architecture.json
+              if (body.questionId === 'q-stack-database' && body.answer) {
+                const archFile = path.join(sddDir, 'architecture.json')
+                const arch = readJsonFile(archFile, { services: [] })
+                const dbSvc = arch.services?.find(s => s.type?.includes('Database'))
+                if (dbSvc) {
+                  dbSvc.tech = body.answer.split('.')[0].slice(0, 50)
+                  writeJsonFile(archFile, arch)
+                }
+              } else if (body.questionId === 'q-stack-frontend' && body.answer) {
+                const archFile = path.join(sddDir, 'architecture.json')
+                const arch = readJsonFile(archFile, { services: [] })
+                const feSvc = arch.services?.find(s => s.type?.includes('Frontend') || s.type?.includes('Fullstack'))
+                if (feSvc) {
+                  feSvc.tech = body.answer.split('.')[0].slice(0, 50)
+                  writeJsonFile(archFile, arch)
+                }
+              }
+
+              res.writeHead(200, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ success: true, updatedQuestionId: body.questionId }))
+              return
+            }
+          }
+
+          // 2.2 Mutar Compuerta de Calidad
+          if (body.gateId) {
+            const projFile = path.join(sddDir, 'project.json')
+            const project = readJsonFile(projFile)
+            if (project) {
+              // Si es un array de gates
+              if (Array.isArray(project.qualityGates)) {
+                const gate = project.qualityGates.find(g => g.id === body.gateId)
+                if (gate) {
+                  if (body.gateStatus) gate.status = body.gateStatus
+                  if (body.verifiedBy) gate.verifiedBy = body.verifiedBy
+                  gate.verifiedAt = new Date().toISOString()
+                  writeJsonFile(projFile, project)
+                  res.writeHead(200, { 'Content-Type': 'application/json' })
+                  res.end(JSON.stringify({ success: true, updatedGate: gate }))
+                  return
+                }
+              } else if (typeof project.qualityGates === 'object') {
+                // Si es un mapa clave-valor booleano
+                project.qualityGates[body.gateId] = body.gateStatus === 'passed' || Boolean(body.done)
+                writeJsonFile(projFile, project)
+                res.writeHead(200, { 'Content-Type': 'application/json' })
+                res.end(JSON.stringify({ success: true, qualityGates: project.qualityGates }))
+                return
+              }
+            }
+          }
+
+          // 2.3 Mutar Tarea de Nodo de Flujo (Flow Node Checklist)
+          if (body.flowId && body.nodeId) {
+            const flowFile = path.join(flowsDir, `${body.flowId}.json`)
+            const flow = readJsonFile(flowFile)
+            if (flow) {
+              const node = flow.nodes?.find(n => n.id === body.nodeId)
+              if (node) {
+                if (body.taskId) {
+                  const task = node.checklist?.find(t => t.id === body.taskId)
+                  if (task) task.done = Boolean(body.done)
+                }
+                if (body.status) node.status = body.status
+                if (body.assignedTo) node.assignedTo = body.assignedTo
+
+                // Recalcular estado de nodo si tiene checklist
+                if (node.checklist && node.checklist.length > 0) {
+                  const doneCount = node.checklist.filter(t => t.done).length
+                  if (doneCount === node.checklist.length) node.status = 'done'
+                  else if (doneCount > 0) node.status = 'in_progress'
+                  else node.status = 'todo'
+                }
+
+                // Recalcular progreso global del flujo
+                let totalTasks = 0
+                let doneTasks = 0
+                flow.nodes.forEach(n => {
+                  if (n.checklist && n.checklist.length > 0) {
+                    totalTasks += n.checklist.length
+                    doneTasks += n.checklist.filter(t => t.done).length
+                  } else {
+                    totalTasks += 1
+                    if (n.status === 'done') doneTasks += 1
+                  }
+                })
+                flow.progress = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0
+
+                writeJsonFile(flowFile, flow)
+                res.writeHead(200, { 'Content-Type': 'application/json' })
+                res.end(JSON.stringify({ success: true, updatedFlow: flow }))
+                return
+              }
+            }
+          }
+
+          // 2.4 Mutar Historia de Usuario (Criterios Gherkin / Kanban)
+          if (body.storyId) {
+            const storyFile = path.join(storiesDir, `${body.storyId}.json`)
+            let story = readJsonFile(storyFile)
+            if (!story) {
+              // fallback al array
+              const sPath = path.join(reqDir, 'user-stories.json')
+              const arr = readJsonFile(sPath, [])
+              story = arr.find(s => s.id === body.storyId)
+            }
+
+            if (story) {
+              if (body.criterionId) {
+                const c = story.acceptanceCriteria?.find(item => item.id === body.criterionId)
+                if (c) c.done = Boolean(body.done)
+              }
+              if (body.assignedTo) story.assignedTo = body.assignedTo
+              if (body.status) story.status = body.status
+
+              const total = story.acceptanceCriteria?.length || 0
+              const doneCount = story.acceptanceCriteria?.filter(item => item.done).length || 0
+              story.progress = total > 0 ? Math.round((doneCount / total) * 100) : (story.status === 'done' ? 100 : 0)
+              if (total > 0 && doneCount === total) story.status = 'done'
+              else if (doneCount > 0) story.status = 'in_progress'
+
+              writeJsonFile(storyFile, story)
+
+              // Sincronizar archivo agrupado si existe
+              const sPath = path.join(reqDir, 'user-stories.json')
+              if (fs.existsSync(sPath)) {
+                const arr = readJsonFile(sPath, [])
+                const idx = arr.findIndex(s => s.id === body.storyId)
+                if (idx !== -1) {
+                  arr[idx] = story
+                  writeJsonFile(sPath, arr)
+                }
+              }
+
+              res.writeHead(200, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ success: true, updatedStory: story }))
+              return
+            }
+          }
+
+          // 2.5 Confirmar Origen [INFERIDO -> CONFIRMADO]
+          if (body.confirmOrigin && body.entityType && body.entityId) {
+            if (body.entityType === 'story') {
+              const storyFile = path.join(storiesDir, `${body.entityId}.json`)
+              const story = readJsonFile(storyFile)
+              if (story) {
+                story.origin = 'confirmed'
+                writeJsonFile(storyFile, story)
+                res.writeHead(200, { 'Content-Type': 'application/json' })
+                res.end(JSON.stringify({ success: true, confirmedStory: story }))
+                return
+              }
+            } else if (body.entityType === 'architecture') {
+              const archFile = path.join(sddDir, 'architecture.json')
+              const arch = readJsonFile(archFile)
+              const node = arch?.services?.find(n => n.id === body.entityId)
+              if (node) {
+                node.origin = 'confirmed'
+                writeJsonFile(archFile, arch)
+                res.writeHead(200, { 'Content-Type': 'application/json' })
+                res.end(JSON.stringify({ success: true, confirmedNode: node }))
+                return
+              }
+            }
+          }
+
+          // 2.6 Mutar o guardar Secuencia UML
+          if (body.sequence) {
+            const seqFile = path.join(seqDir, 'sequences.json')
+            let seqs = readJsonFile(seqFile, [])
+            if (!Array.isArray(seqs)) seqs = seqs ? [seqs] : []
+            const idx = seqs.findIndex(s => s.id === body.sequence.id || (body.sequence.flowId && s.flowId === body.sequence.flowId))
+            if (idx !== -1) {
+              seqs[idx] = { ...seqs[idx], ...body.sequence }
+            } else {
+              seqs.push(body.sequence)
+            }
+            writeJsonFile(seqFile, seqs)
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, updatedSequence: body.sequence }))
+            return
+          }
+
+          // 2.7 Mutar o guardar Diagrama de Máquina de Estados (FSM)
+          if (body.stateMachine) {
+            const fsmFile = path.join(seqDir, 'state-machines.json')
+            let fsms = readJsonFile(fsmFile, [])
+            if (!Array.isArray(fsms)) fsms = fsms ? [fsms] : []
+            const idx = fsms.findIndex(f => f.id === body.stateMachine.id || f.entity === body.stateMachine.entity)
+            if (idx !== -1) {
+              fsms[idx] = { ...fsms[idx], ...body.stateMachine }
+            } else {
+              fsms.push(body.stateMachine)
+            }
+            writeJsonFile(fsmFile, fsms)
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, updatedStateMachine: body.stateMachine }))
+            return
+          }
+
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: true, message: 'Operación procesada' }))
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: err.message }))
+        }
+      })
+      return
+    }
+
+    // 3. Rescan POST /api/sdd/scan
+    if (url.pathname === '/api/sdd/scan' && req.method === 'POST') {
+      const scanResults = scanProject(projectRoot)
+      if (scanResults.detectedScreens && scanResults.detectedScreens.length > 0) {
+        const existing = readJsonFile(path.join(uiDir, 'screens.json'), [])
+        if (!existing || existing.length === 0) {
+          writeJsonFile(path.join(uiDir, 'screens.json'), scanResults.detectedScreens)
+        }
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ success: true, scanResults }))
+      return
+    }
+
+    // 3.05 Rescan UI/UX Views POST /api/uiux/rescan
+    if (url.pathname === '/api/uiux/rescan' && req.method === 'POST') {
+      const existing = readJsonFile(path.join(uiDir, 'screens.json'), [])
+      const detected = scanProjectViews(projectRoot)
+
+      const merged = mergeDetectedScreens(detected, existing)
+      writeJsonFile(path.join(uiDir, 'screens.json'), merged)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ success: true, count: merged.length, screens: merged }))
+      return
+    }
+
+    // 3.1 Genesis Synthesize POST /api/genesis/synthesize (Impulsado 100% por OpenRouter AI)
+    if (url.pathname === '/api/genesis/synthesize' && req.method === 'POST') {
+      let bodyData = ''
+      req.on('data', chunk => { bodyData += chunk })
+      req.on('end', async () => {
+        try {
+          const { idea, apiKey, model } = JSON.parse(bodyData || '{}')
+          const orConfig = getOpenRouterConfig(projectRoot)
+          const effectiveKey = apiKey || orConfig.apiKey
+          const effectiveModel = model || orConfig.defaultModel
+          const result = await processGenesisChat(
+            [{ role: 'user', content: idea || '' }],
+            null,
+            { apiKey: effectiveKey, model: effectiveModel }
+          )
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: true, preview: result.preview, reply: result.reply, tokens: result.tokens }))
+        } catch (err) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: err.message }))
+        }
+      })
+      return
+    }
+
+    // 3.2 Genesis Scaffold POST /api/genesis/scaffold
+    if (url.pathname === '/api/genesis/scaffold' && req.method === 'POST') {
+      let bodyData = ''
+      req.on('data', chunk => { bodyData += chunk })
+      req.on('end', () => {
+        try {
+          const { genesisPayload } = JSON.parse(bodyData)
+          const result = scaffoldGenesis(projectRoot, genesisPayload)
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: true, result }))
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: err.message }))
+        }
+      })
+      return
+    }
+
+    // 3.3 Genesis Chat POST /api/genesis/chat
+    if (url.pathname === '/api/genesis/chat' && req.method === 'POST') {
+      let bodyData = ''
+      req.on('data', chunk => { bodyData += chunk })
+      req.on('end', async () => {
+        try {
+          const { messages, currentPreview, apiKey, model } = JSON.parse(bodyData || '{}')
+          const orConfig = getOpenRouterConfig(projectRoot)
+          const effectiveKey = apiKey || orConfig.apiKey
+          const effectiveModel = model || orConfig.defaultModel
+          const chatResult = await processGenesisChat(messages, currentPreview, {
+            apiKey: effectiveKey,
+            model: effectiveModel
+          })
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: true, ...chatResult }))
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: err.message }))
+        }
+      })
+      return
+    }
+
+    // 3.35 OpenRouter Config GET /api/openrouter/config
+    if (url.pathname === '/api/openrouter/config' && req.method === 'GET') {
+      const config = getOpenRouterConfig(projectRoot)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ success: true, ...config }))
+      return
+    }
+
+    // 3.36 OpenRouter Config POST /api/openrouter/config
+    if (url.pathname === '/api/openrouter/config' && req.method === 'POST') {
+      let bodyData = ''
+      req.on('data', chunk => { bodyData += chunk })
+      req.on('end', async () => {
+        try {
+          const { apiKey, model } = JSON.parse(bodyData || '{}')
+          const configFile = path.join(sddDir, 'config.json')
+          const existing = readJsonFile(configFile, {})
+          let effectiveKey = apiKey !== undefined ? apiKey.trim() : existing.openrouterApiKey
+
+          // Si la clave tiene formato sk-or-v1-..., validar si es de gestión y auto-generar clave chat válida
+          if (effectiveKey && effectiveKey.startsWith('sk-or-v1-')) {
+            try {
+              const authRes = await fetch('https://openrouter.ai/api/v1/auth/key', {
+                headers: { 'Authorization': `Bearer ${effectiveKey}` }
+              })
+              if (authRes.ok) {
+                const authData = await authRes.json()
+                if (authData?.data?.is_management_key || authData?.data?.is_provisioning_key) {
+                  const createRes = await fetch('https://openrouter.ai/api/v1/keys', {
+                    method: 'POST',
+                    headers: {
+                      'Authorization': `Bearer ${effectiveKey}`,
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ name: 'sdd-studio-chat-key' })
+                  })
+                  if (createRes.ok) {
+                    const createData = await createRes.json()
+                    if (createData?.key) {
+                      effectiveKey = createData.key
+                    }
+                  }
+                }
+              }
+            } catch (err) {
+              console.warn('[OpenRouter Key Verification]:', err.message)
+            }
+          }
+
+          if (effectiveKey !== undefined) existing.openrouterApiKey = effectiveKey
+          if (model) existing.openrouterModel = model.trim()
+          existing.lastUpdated = new Date().toISOString()
+          writeJsonFile(configFile, existing)
+
+          // Guardar también globalmente en ~/.sdd/config.json para todos los proyectos
+          const globalConfigFile = getGlobalConfigFile()
+          const existingGlobal = readJsonFile(globalConfigFile, {})
+          if (effectiveKey !== undefined) existingGlobal.openrouterApiKey = effectiveKey
+          if (model) existingGlobal.openrouterModel = model.trim()
+          existingGlobal.lastUpdated = new Date().toISOString()
+          writeJsonFile(globalConfigFile, existingGlobal)
+          const updated = getOpenRouterConfig(projectRoot)
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: true, message: 'Configuración de OpenRouter guardada con éxito', ...updated }))
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: err.message }))
+        }
+      })
+      return
+    }
+
+    // 3.4 Genesis Dispatch POST /api/genesis/dispatch (Alternativa B: Protocolo de Tareas hacia Antigravity)
+    if (url.pathname === '/api/genesis/dispatch' && req.method === 'POST') {
+      let bodyData = ''
+      req.on('data', chunk => { bodyData += chunk })
+      req.on('end', () => {
+        try {
+          const { prompt, assignedTo } = JSON.parse(bodyData || '{}')
+          if (!prompt || !prompt.trim()) {
+            res.writeHead(400, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ error: 'El prompt o idea es requerido' }))
+            return
+          }
+
+          const taskFile = path.join(sddDir, 'genesis_task.json')
+          fs.mkdirSync(sddDir, { recursive: true })
+
+          const task = {
+            taskId: `genesis-task-${Date.now()}`,
+            status: 'pending',
+            prompt: prompt.trim(),
+            assignedTo: assignedTo || 'Antigravity',
+            createdAt: new Date().toISOString(),
+            projectRoot: projectRoot,
+            targetOutputs: [
+              '.sdd/project.json',
+              '.sdd/core/problem.json',
+              '.sdd/core/target-user.json',
+              '.sdd/core/scope-boundaries.json',
+              '.sdd/core/success-criteria.json',
+              '.sdd/core/risks.json',
+              '.sdd/requirements/stories/*.json',
+              '.sdd/architecture.json',
+              '.sdd/database/schema-erd.json',
+              '.sdd/flows/*.json',
+              'AGENTS.md'
+            ],
+            notes: 'Orden de Génesis agéntica. Antigravity IDE (o el agente activo) lee esta orden, redacta la especificación con sus tokens y escribe los archivos en disco.'
+          }
+
+          writeJsonFile(taskFile, task)
+
+          console.log(`\n🔔 [SDD_GENESIS_TASK_ALERT]`)
+          console.log(`TASK_ID: ${task.taskId}`)
+          console.log(`PROJECT_DIR: ${projectRoot}`)
+          console.log(`USER_PROMPT: "${task.prompt}"`)
+          console.log(`ACTION_REQUIRED: Antigravity Agent, por favor lee esta orden y genera la especificación SDD en ${projectRoot}.\n`)
+
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: true, task }))
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: err.message }))
+        }
+      })
+      return
+    }
+
+    // 3.5 Genesis Task Status GET /api/genesis/task-status
+    if (url.pathname === '/api/genesis/task-status' && req.method === 'GET') {
+      try {
+        const taskFile = path.join(sddDir, 'genesis_task.json')
+        const taskExists = fs.existsSync(taskFile)
+        const task = taskExists ? readJsonFile(taskFile) : null
+
+        const projectFile = path.join(sddDir, 'project.json')
+        const hasProject = fs.existsSync(projectFile)
+        let storyCount = 0
+        if (fs.existsSync(storiesDir)) {
+          storyCount = fs.readdirSync(storiesDir).filter(f => f.endsWith('.json')).length
+        }
+        if (storyCount === 0 && fs.existsSync(path.join(reqDir, 'user-stories.json'))) {
+          const arr = readJsonFile(path.join(reqDir, 'user-stories.json'), [])
+          storyCount = Array.isArray(arr) ? arr.length : 0
+        }
+
+        const isCompleted = task?.status === 'completed' || (hasProject && storyCount > 0 && task?.status !== 'pending')
+
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({
+          exists: taskExists,
+          task,
+          ready: isCompleted,
+          hasProject,
+          storyCount,
+          hasArchitecture: fs.existsSync(path.join(sddDir, 'architecture.json')),
+          hasDatabase: fs.existsSync(path.join(dbDir, 'schema-erd.json'))
+        }))
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: err.message }))
+      }
+      return
+    }
+
+    // 3.6 Genesis Complete Task POST /api/genesis/complete-task
+    if (url.pathname === '/api/genesis/complete-task' && req.method === 'POST') {
+      let bodyData = ''
+      req.on('data', chunk => { bodyData += chunk })
+      req.on('end', () => {
+        try {
+          const taskFile = path.join(sddDir, 'genesis_task.json')
+          let task = readJsonFile(taskFile, {})
+          task.status = 'completed'
+          task.completedAt = new Date().toISOString()
+          task.completedBy = 'Antigravity'
+          writeJsonFile(taskFile, task)
+
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: true, task }))
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: err.message }))
+        }
+      })
+      return
+    }
+
+    // 4. Servir archivos estáticos de la UI
+    let reqPath = url.pathname
+    if (reqPath === '/') reqPath = '/index.html'
+
+    const staticFile = path.join(UI_DIR, reqPath)
+    if (fs.existsSync(staticFile) && fs.statSync(staticFile).isFile()) {
+      const ext = path.extname(staticFile).toLowerCase()
+      const mime = MIME_TYPES[ext] || 'application/octet-stream'
+      const content = fs.readFileSync(staticFile)
+      res.writeHead(200, { 'Content-Type': mime })
+      res.end(content)
+      return
+    }
+
+    // Fallback al index.html si existe
+    const indexFile = path.join(UI_DIR, 'index.html')
+    if (fs.existsSync(indexFile)) {
+      const content = fs.readFileSync(indexFile)
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+      res.end(content)
+      return
+    }
+
+    // Si aún no está la UI en ui/, entregar mensaje de bienvenida
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+    res.end(`<h1>SDD Studio Microserver</h1><p>UI loading...</p>`)
+  })
+
+  function isPortAvailable(testPort) {
+    return new Promise((resolve) => {
+      const tester = net.createServer()
+      tester.unref()
+      tester.once('error', () => {
+        resolve(false)
+      })
+      tester.once('listening', () => {
+        tester.close(() => resolve(true))
+      })
+      tester.listen(testPort)
+    })
+  }
+
+  async function findAvailablePort(startPort, maxAttempts = 30) {
+    let p = startPort
+    for (let i = 0; i < maxAttempts; i++) {
+      const available = await isPortAvailable(p)
+      if (available) return p
+      p++
+    }
+    return startPort
+  }
+
+  return {
+    start: async () => {
+      const targetPort = Number(port) || 3030
+      const boundPort = await findAvailablePort(targetPort)
+      return new Promise((resolve, reject) => {
+        server.on('error', (err) => {
+          if (err.code === 'EADDRINUSE') {
+            console.error(`\n❌ Error: El puerto ${boundPort} ya está en uso.`)
+            console.error(`👉 Usa 'sdd studio --port <otro_puerto>' para elegir un puerto libre.\n`)
+          } else {
+            console.error(`\n❌ Error en el servidor SDD:`, err.message)
+          }
+          reject(err)
+        })
+
+        server.listen(boundPort, () => {
+          console.log(`\n==================================================`)
+          console.log(`⚡ SDD Studio iniciado en http://localhost:${boundPort}`)
+          if (boundPort !== targetPort) {
+            console.log(`ℹ️  Puerto original (${targetPort}) ocupado por otro proceso; asignado automáticamente puerto ${boundPort}`)
+          }
+          console.log(`📁 Repositorio: ${projectRoot}`)
+          console.log(`🛡️  AGENTS.md y compuertas de calidad activos`)
+          console.log(`==================================================\n`)
+          resolve(boundPort)
+        })
+      })
+    },
+    close: () => server.close()
+  }
+}
