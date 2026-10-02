@@ -1,0 +1,28 @@
+{
+  "id": "US-001",
+  "epicId": "EPIC-01",
+  "serviceId": "srv-node",
+  "title": "Arranque del servidor HTTP",
+  "role": "Desarrollador / Sistema",
+  "action": "Iniciar la aplicación server.js",
+  "benefit": "Disponibilizar el servicio HTTP",
+  "points": 3,
+  "priority": "P0",
+  "status": "done",
+  "progress": 100,
+  "origin": "reverse_engineered",
+  "detectedAt": "2026-10-01T20:38:05.217Z",
+  "scopeFiles": [
+    "src/server.js",
+    "src/index.js"
+  ],
+  "acceptanceCriteria": [
+    {
+      "id": "c-1",
+      "scenario": "El servidor arranca y escucha en el puerto configurado",
+      "given": "El código de server.js e index.js está en el workspace",
+      "when": "Se ejecuta el punto de entrada (index.js)",
+      "then": "El servidor HTTP queda escuchando y responde peticiones"
+    }
+  ]
+}

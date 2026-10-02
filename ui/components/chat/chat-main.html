@@ -1,0 +1,200 @@
+<!-- RIGHT CHAT COLUMN: Top Header, Messages Stream & Input -->
+<div class="flex-1 flex flex-col h-full bg-zinc-50 overflow-hidden relative">
+  <!-- Top Chat Header -->
+  <header class="h-14 shrink-0 flex items-center justify-between px-5 border-b border-zinc-200 bg-white/90 backdrop-blur-md z-20">
+    <div class="flex items-center gap-3">
+      <!-- Sidebar Toggle Button -->
+      <button
+        id="btn-toggle-sidebar"
+        onclick="toggleChatSidebar()"
+        class="p-2 rounded-lg text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 transition-colors cursor-pointer"
+        title="Mostrar/Ocultar barra lateral"
+      >
+        <i data-lucide="panel-left" class="w-4 h-4"></i>
+      </button>
+
+      <!-- Model / Engine Dropdown -->
+      <div class="relative">
+        <button
+          id="model-selector-btn"
+          onclick="toggleModelDropdown()"
+          class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold bg-white hover:bg-zinc-50 text-zinc-800 border border-zinc-200 transition-all shadow-xs cursor-pointer"
+        >
+          <i data-lucide="sparkles" class="w-3.5 h-3.5 text-purple-600"></i>
+          <span id="current-engine-label">Ling 3.0 Flash (:free)</span>
+          <i data-lucide="chevron-down" class="w-3 h-3 text-zinc-400"></i>
+        </button>
+
+        <!-- Dropdown Menu -->
+        <div id="model-dropdown-menu" class="hidden absolute top-10 left-0 w-80 bg-white border border-zinc-200 rounded-2xl p-2 shadow-2xl z-50 space-y-1">
+          <div class="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-purple-700 flex items-center justify-between">
+            <span>Modelos Gratuitos (OpenRouter)</span>
+            <span class="px-1.5 py-0.2 rounded bg-purple-100 text-purple-800 text-[9px] font-bold">100% Gratis</span>
+          </div>
+          <div onclick="selectEngine('openrouter', 'Ling 3.0 Flash (:free)', 'inclusionai/ling-3.0-flash-sante:free')" class="p-2 rounded-xl hover:bg-purple-50 cursor-pointer transition-colors space-y-0.5">
+            <div class="text-xs font-bold text-zinc-900 flex items-center justify-between">
+              <span class="flex items-center gap-1.5"><i data-lucide="zap" class="w-3.5 h-3.5 text-purple-600"></i> Ling 3.0 Flash (262k)</span>
+              <span class="text-[9px] font-mono text-purple-700 font-bold bg-purple-50 px-1 rounded">Recomendado</span>
+            </div>
+            <div class="text-[10px] text-zinc-500">Excelente para arquitectura de software, Gherkin y contratos SDD</div>
+          </div>
+          <div onclick="selectEngine('openrouter', 'OpenRouter Free (:free)', 'openrouter/free')" class="p-2 rounded-xl hover:bg-purple-50 cursor-pointer transition-colors space-y-0.5">
+            <div class="text-xs font-bold text-zinc-900 flex items-center justify-between">
+              <span class="flex items-center gap-1.5"><i data-lucide="sparkles" class="w-3.5 h-3.5 text-indigo-600"></i> OpenRouter Auto-Router</span>
+              <span class="text-[9px] font-mono text-indigo-700 font-bold bg-indigo-50 px-1 rounded">Auto</span>
+            </div>
+            <div class="text-[10px] text-zinc-500">Enruta automáticamente al modelo gratuito disponible y activo</div>
+          </div>
+          <div onclick="selectEngine('openrouter', 'LiquidAI LFM 2.5 (:free)', 'liquid/lfm-2.5-2.6b:free')" class="p-2 rounded-xl hover:bg-purple-50 cursor-pointer transition-colors space-y-0.5">
+            <div class="text-xs font-bold text-zinc-900 flex items-center justify-between">
+              <span class="flex items-center gap-1.5"><i data-lucide="activity" class="w-3.5 h-3.5 text-teal-600"></i> LiquidAI LFM 2.5</span>
+              <span class="text-[9px] font-mono text-teal-700 font-bold bg-teal-50 px-1 rounded">Rápido</span>
+            </div>
+            <div class="text-[10px] text-zinc-500">Respuesta ágil de baja latencia</div>
+          </div>
+          <div onclick="selectEngine('openrouter', 'Dots Studio 3 (:free)', 'dots-studio/dots-3-note-preview:free')" class="p-2 rounded-xl hover:bg-purple-50 cursor-pointer transition-colors space-y-0.5">
+            <div class="text-xs font-bold text-zinc-900 flex items-center justify-between">
+              <span class="flex items-center gap-1.5"><i data-lucide="file-text" class="w-3.5 h-3.5 text-amber-600"></i> Dots Studio 3 (512k)</span>
+            </div>
+            <div class="text-[10px] text-zinc-500">Ventana amplia de contexto para documentos extensos</div>
+          </div>
+
+          <div class="border-t border-zinc-100 pt-1 mt-1">
+            <div onclick="openOpenRouterModal()" class="p-2 rounded-xl bg-purple-50/70 hover:bg-purple-100/70 cursor-pointer transition-colors flex items-center justify-between text-xs font-bold text-purple-900">
+              <span class="flex items-center gap-1.5"><i data-lucide="key" class="w-3.5 h-3.5 text-purple-600"></i> Configurar API Key</span>
+              <i data-lucide="arrow-right" class="w-3 h-3 text-purple-600"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Header Items -->
+    <div class="flex items-center gap-2">
+      <!-- OpenRouter API Key Status Button -->
+      <button
+        id="btn-openrouter-status"
+        onclick="openOpenRouterModal()"
+        class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shadow-2xs cursor-pointer bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
+        title="Configurar conexión de OpenRouter"
+      >
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        <i data-lucide="key" class="w-3.5 h-3.5 text-emerald-700"></i>
+        <span id="openrouter-badge-text">OpenRouter Activo</span>
+      </button>
+
+      <!-- Token Status Pill -->
+      <div class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 border border-purple-200 text-[11px] font-bold text-purple-800">
+        <i data-lucide="coins" class="w-3.5 h-3.5 text-purple-600"></i>
+        <span id="chat-token-pill">Tokens: OpenRouter :free</span>
+      </div>
+
+      <!-- Switch to Cockpit Button -->
+      <button
+        id="btn-toggle-cockpit"
+        onclick="switchScreen('cockpit')"
+        class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-1.5 transition-all shadow-md shadow-purple-600/20 cursor-pointer"
+      >
+        <i data-lucide="layout-dashboard" class="w-3.5 h-3.5 text-purple-200"></i>
+        <span>Cabina (12 Perspectivas)</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Progressive Engineering Phase Stepper (Guía Didáctica para No Técnicos) -->
+  <div id="genesis-stepper-bar" class="shrink-0 bg-white border-b border-zinc-200/90 px-4 py-2.5 flex items-center justify-between text-xs z-10 overflow-x-auto shadow-2xs">
+    <div class="flex items-center gap-1.5 md:gap-3 mx-auto">
+      <div id="step-pill-1" class="step-pill flex items-center gap-1.5 px-3 py-1 rounded-xl font-bold bg-purple-100 text-purple-900 border border-purple-200 transition-all cursor-pointer" onclick="setPromptIdea('Quiero definir mejor el problema y a quién va dirigido este software')">
+        <span class="step-number w-4 h-4 rounded-full bg-purple-600 text-white flex items-center justify-center text-[10px]">1</span>
+        <span>Problema & Audiencia</span>
+      </div>
+      <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-zinc-300"></i>
+      <div id="step-pill-2" class="step-pill flex items-center gap-1.5 px-3 py-1 rounded-xl font-bold bg-zinc-100 text-zinc-500 border border-zinc-200 transition-all cursor-pointer" onclick="setPromptIdea('Ayúdame a definir los Non-Goals y el alcance estricto de la V1')">
+        <span class="step-number w-4 h-4 rounded-full bg-zinc-300 text-zinc-600 flex items-center justify-center text-[10px]">2</span>
+        <span>Alcance & Non-Goals</span>
+      </div>
+      <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-zinc-300"></i>
+      <div id="step-pill-3" class="step-pill flex items-center gap-1.5 px-3 py-1 rounded-xl font-bold bg-zinc-100 text-zinc-500 border border-zinc-200 transition-all cursor-pointer" onclick="setPromptIdea('Estructura las historias de usuario Jira con criterios Gherkin Dado-Cuando-Entonces')">
+        <span class="step-number w-4 h-4 rounded-full bg-zinc-300 text-zinc-600 flex items-center justify-center text-[10px]">3</span>
+        <span>Historias & Gherkin</span>
+      </div>
+      <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-zinc-300"></i>
+      <div id="step-pill-4" class="step-pill flex items-center gap-1.5 px-3 py-1 rounded-xl font-bold bg-zinc-100 text-zinc-500 border border-zinc-200 transition-all cursor-pointer" onclick="setPromptIdea('Diseña las pantallas de la interfaz, rutas y flujos de navegación')">
+        <span class="step-number w-4 h-4 rounded-full bg-zinc-300 text-zinc-600 flex items-center justify-center text-[10px]">4</span>
+        <span>Pantallas & UI</span>
+      </div>
+      <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-zinc-300"></i>
+      <div id="step-pill-5" class="step-pill flex items-center gap-1.5 px-3 py-1 rounded-xl font-bold bg-zinc-100 text-zinc-500 border border-zinc-200 transition-all cursor-pointer" onclick="setPromptIdea('Genera la arquitectura técnica y el diagrama de secuencia UML')">
+        <span class="step-number w-4 h-4 rounded-full bg-zinc-300 text-zinc-600 flex items-center justify-center text-[10px]">5</span>
+        <span>Arquitectura & UML</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Messages Container -->
+  <div id="genesis-chat-scroll" class="flex-1 overflow-y-auto px-4 py-8 bg-zinc-50">
+    <div class="max-w-3xl mx-auto space-y-6">
+
+      <!-- Hero State (CLEAN - NO SUGGESTIONS / NO RECOMMENDATIONS) -->
+      <div id="genesis-chat-hero" class="text-center py-16 md:py-24 space-y-5">
+        <div class="w-16 h-16 rounded-3xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center mx-auto shadow-xl shadow-purple-600/20 ring-4 ring-purple-100">
+          <i data-lucide="sparkles" class="w-8 h-8 text-white"></i>
+        </div>
+        
+        <div class="space-y-2">
+          <h1 class="text-3xl md:text-4xl font-black tracking-tight text-zinc-950">
+            ¿Qué quieres construir hoy?
+          </h1>
+          <p class="text-sm md:text-base text-zinc-500 max-w-lg mx-auto leading-relaxed font-normal">
+            Escribe tu idea de software en bruto. Tu agente de IA estructurará las 12 perspectivas de SDD con alcance protegido y abrirá la cabina de control.
+          </p>
+        </div>
+      </div>
+
+      <!-- Chat Messages Stream -->
+      <div id="genesis-messages-stream" class="space-y-6"></div>
+
+    </div>
+  </div>
+
+  <!-- Floating Bottom Chat Input -->
+  <div class="shrink-0 p-4 bg-gradient-to-t from-zinc-50 via-zinc-50 to-transparent">
+    <div class="max-w-3xl mx-auto space-y-2">
+      <div class="bg-white border border-zinc-200 focus-within:border-purple-600 focus-within:ring-4 focus-within:ring-purple-100 rounded-3xl p-3.5 shadow-2xl transition-all">
+        <textarea
+          id="genesis-chat-input"
+          rows="2"
+          class="w-full bg-transparent text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none resize-none px-2 py-1 leading-relaxed"
+          placeholder="Describe tu idea de software, o pega notas y requerimientos..."
+          onkeydown="handleChatKeyDown(event)"
+        ></textarea>
+        
+        <div class="flex items-center justify-between pt-2.5 px-1 border-t border-zinc-100 mt-1">
+          <div class="flex items-center gap-2 text-xs text-zinc-500">
+            <span class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-50 text-[11px] text-purple-800 font-bold border border-purple-200">
+              <i data-lucide="cpu" class="w-3 h-3 text-purple-600"></i>
+              <span id="input-engine-pill">Antigravity Agent</span>
+            </span>
+            <span class="text-[10px] text-zinc-400 hidden sm:inline">Presiona Enter para enviar, Shift+Enter para nueva línea</span>
+          </div>
+
+          <button
+            id="genesis-chat-send-btn"
+            onclick="sendGenesisChatMessage()"
+            title="Enviar idea al agente (Enter)"
+            class="w-8 h-8 rounded-full bg-purple-600 hover:bg-purple-700 text-white flex items-center justify-center shrink-0 transition-all shadow-md shadow-purple-600/30 cursor-pointer active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" class="text-white">
+              <path d="m5 12 7-7 7 7"/>
+              <path d="M12 19V5"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="text-center text-[10px] text-zinc-400">
+        SDD Studio • Gobernanza de especificaciones y control de alcance sin alucinaciones.
+      </div>
+    </div>
+  </div>
+</div>

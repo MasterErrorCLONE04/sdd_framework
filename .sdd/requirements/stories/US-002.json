@@ -1,0 +1,27 @@
+{
+  "id": "US-002",
+  "epicId": "EPIC-01",
+  "serviceId": "srv-node",
+  "title": "Endpoint GET expuesto",
+  "role": "Cliente HTTP",
+  "action": "Realizar petición GET al servidor",
+  "benefit": "Obtener respuesta del endpoint",
+  "points": 3,
+  "priority": "P0",
+  "status": "done",
+  "progress": 80,
+  "origin": "reverse_engineered",
+  "detectedAt": "2026-10-01T20:38:05.217Z",
+  "scopeFiles": [
+    "src/server.js"
+  ],
+  "acceptanceCriteria": [
+    {
+      "id": "c-2",
+      "scenario": "GET responde sin errores",
+      "given": "Servidor corriendo",
+      "when": "Se envía petición GET",
+      "then": "Se recibe respuesta HTTP 200"
+    }
+  ]
+}

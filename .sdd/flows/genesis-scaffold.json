@@ -1,0 +1,32 @@
+{
+  "id": "genesis-scaffold",
+  "name": "Generación de Scaffold",
+  "description": "Flujo de generación de código scaffold basado en especificaciones sintetizadas",
+  "priority": "P1",
+  "progress": 100,
+  "origin": "ai_detected",
+  "detectedAt": "2026-10-01T17:28:34.792Z",
+  "nodes": [
+    {
+      "id": "node-1",
+      "name": "Generar scaffold",
+      "type": "API",
+      "status": "done",
+      "scopeFiles": [
+        "src/server.js"
+      ],
+      "checklist": [
+        {
+          "id": "t-1",
+          "text": "Llamada POST /api/genesis/scaffold",
+          "done": true
+        },
+        {
+          "id": "t-2",
+          "text": "Generar estructura de código base",
+          "done": true
+        }
+      ]
+    }
+  ]
+}

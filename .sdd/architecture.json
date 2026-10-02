@@ -1,0 +1,27 @@
+{
+  "services": [
+    {
+      "id": "srv-node",
+      "label": "Servidor Node.js",
+      "tech": "JavaScript/TypeScript (Node.js)",
+      "type": "Backend",
+      "status": "online",
+      "healthPercent": 30,
+      "description": "Servidor HTTP básico. server.js expone al menos un endpoint GET; index.js contiene operaciones de base de datos.",
+      "submodules": [
+        "src/server.js",
+        "src/index.js"
+      ]
+    },
+    {
+      "id": "db-unknown",
+      "label": "Base de Datos (no identificada)",
+      "tech": "Desconocido",
+      "type": "Database",
+      "status": "unknown",
+      "healthPercent": 0,
+      "description": "index.js realiza operaciones de BD, pero el motor y esquema no fueron detectados en la evidencia.",
+      "submodules": []
+    }
+  ]
+}

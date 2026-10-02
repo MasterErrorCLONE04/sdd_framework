@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import { extractJsonFromAi } from './flows-ai.js'
 
 /**
  * Construye la estructura de especificación de las 12 perspectivas
@@ -198,12 +199,19 @@ export function buildSpecFromAi(aiData, rawText = '') {
     database: {
       tables
     },
+    currentPhase: aiData.currentPhase || 1,
+    phaseTitle: aiData.phaseTitle || 'Estructuración de Requerimientos',
+    suggestedActions: Array.isArray(aiData.suggestedActions) && aiData.suggestedActions.length > 0
+      ? aiData.suggestedActions
+      : ['Aprobar y continuar con la siguiente fase', 'Añadir más detalles al alcance'],
     sequences: [
       {
         id: 'seq-01-flujo-principal',
         flowId: '01-flujo-principal',
         title: `Secuencia UML: ${projName}`,
-        mermaid: mermaidLines.join('\n')
+        mermaid: (typeof aiData.sequenceUml === 'string' && aiData.sequenceUml.includes('sequenceDiagram'))
+          ? aiData.sequenceUml
+          : `sequenceDiagram\n    autonumber\n    actor U as 👤 ${(stories[0]?.role || 'Usuario')}\n    participant FE as 🖥️ ${(services[0]?.label || 'Frontend Web')}\n    participant BE as ⚡ ${(services[1]?.label || 'Backend API')}\n    participant DB as 🐘 ${(tables[0]?.table ? `DB (${tables[0].table})` : 'Base de Datos')}\n\n    U->>FE: 1. Inicia acción en la interfaz\n    FE->>BE: 2. Petición autenticada con payload protegido\n    BE->>DB: 3. Operación transaccional y validación de reglas\n    DB-->>BE: 4. Confirmación de datos persistidos\n    BE-->>FE: 5. Respuesta JSON (200 OK)\n    FE-->>U: 6. Actualización reactiva de estado en pantalla`
       }
     ],
     stateMachines: [
@@ -211,13 +219,41 @@ export function buildSpecFromAi(aiData, rawText = '') {
         id: 'fsm-01-ciclo-vida',
         title: `Máquina de Estados: ${projName}`,
         entity: 'Operacion',
-        mermaid: `stateDiagram-v2\n    [*] --> Creado\n    Creado --> EnProceso: Procesar\n    EnProceso --> Completado: Finalizar\n    EnProceso --> Cancelado: Abortar\n    Completado --> [*]\n    Cancelado --> [*]`
+        mermaid: (typeof aiData.stateMachine === 'string' && aiData.stateMachine.includes('stateDiagram'))
+          ? aiData.stateMachine
+          : `stateDiagram-v2\n    [*] --> Borrador: Creación inicial\n    Borrador --> Validado: Verificación de reglas\n    Validado --> EnProceso: Autorizado para ejecución\n    EnProceso --> Completado: Cumplimiento exitoso\n    EnProceso --> Fallido: Excepción o rechazo\n    Completado --> [*]\n    Fallido --> [*]`
       }
     ],
     uiUx: {
-      screens: [
-        { id: 'scr-1', name: 'Pantalla Principal', route: '/', description: 'Interfaz principal de operación' }
-      ]
+      screens: Array.isArray(aiData.screens) && aiData.screens.length > 0
+        ? aiData.screens.map((sc, i) => ({
+            id: sc.id || `SCR-${String(i + 1).padStart(2, '0')}`,
+            name: sc.name || `Pantalla ${i + 1}`,
+            route: sc.route || (i === 0 ? '/' : `/${(sc.name || `pantalla-${i + 1}`).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`),
+            description: sc.description || 'Vista estructurada de la interfaz de usuario',
+            layout: sc.layout || 'standard-app',
+            status: 'planned',
+            healthPercent: 100,
+            checklist: Array.isArray(sc.checklist) ? sc.checklist : [
+              { id: `chk-${i}-1`, text: `Renderizar layout principal de ${sc.name || 'la pantalla'}`, done: false },
+              { id: `chk-${i}-2`, text: 'Validar estados reactivos y manejo de errores', done: false }
+            ]
+          }))
+        : [
+            {
+              id: 'SCR-01',
+              name: 'Dashboard Principal',
+              route: '/',
+              description: `Vista principal y centro de mando interactivo para ${projName}.`,
+              layout: 'standard-app',
+              status: 'planned',
+              healthPercent: 100,
+              checklist: [
+                { id: 'chk-1-1', text: 'Renderizar vista principal con componentes clave', done: false },
+                { id: 'chk-1-2', text: 'Probar navegación y acciones del usuario', done: false }
+              ]
+            }
+          ]
     },
     discovery: {
       interviewSessions: buildDiscoveryInterviews(projName, purpose, depth, services)
@@ -467,7 +503,7 @@ ${nonGoalsText}
 /**
  * Invocador directo a OpenRouter AI (enfocado en modelos 100% gratuitos :free)
  */
-export async function callOpenRouter({ apiKey, model, messages = [], systemPrompt }) {
+export async function callOpenRouter({ apiKey, model, messages = [], systemPrompt, maxTokens = 6000 }) {
   let key = (apiKey || process.env.OPENROUTER_API_KEY || '').trim()
   if (!key) {
     throw new Error('OPENROUTER_KEY_REQUIRED: No se detectó la clave de API de OpenRouter. Configúrala en la interfaz o en el archivo .env para utilizar la IA.')
@@ -524,7 +560,7 @@ export async function callOpenRouter({ apiKey, model, messages = [], systemPromp
       model: selectedModel,
       messages: formattedMessages,
       temperature: 0.2,
-      max_tokens: 3000
+      max_tokens: maxTokens
     })
   })
 
@@ -542,7 +578,7 @@ export async function callOpenRouter({ apiKey, model, messages = [], systemPromp
         model: 'openrouter/free',
         messages: formattedMessages,
         temperature: 0.2,
-        max_tokens: 3000
+        max_tokens: maxTokens
       })
     })
   }
@@ -583,51 +619,108 @@ export async function processGenesisChat(messages = [], currentPreview = null, o
   }
 
   const targetModel = options.model || 'inclusionai/ling-3.0-flash-sante:free'
-  const systemPrompt = `Eres el Arquitecto de Software Principal y Agente de Gobernanza SDD (Spec-Driven Development).
-Tu misión es transformar el requerimiento del usuario en una especificación técnica profesional antes de escribir una sola línea de código.
-Estructura tu respuesta en dos secciones:
-1. Una explicación ejecutiva en Markdown en español detallando:
-   - Resumen del requerimiento y alcance de la V1.
-   - Stack tecnológico recomendado (Frontend, Backend, Base de Datos, Autenticación, Hosting).
-   - Non-Goals explícitos de la V1 (lo que NO se programará para evitar dispersión).
-   - Flujos de negocio a modelar (Happy Path y Casos de Borde).
-2. Al final, añade un bloque JSON delimitado por \`\`\`json y \`\`\` con las especificaciones inferidas:
+  
+  // Contexto previo acumulado
+  let previousContextStr = ''
+  if (currentPreview && typeof currentPreview === 'object') {
+    const pName = currentPreview.project?.name || ''
+    const pNonGoals = currentPreview.core?.scopeBoundaries?.explicitNonGoals?.map(ng => ng.feature).join(', ') || ''
+    const pStories = currentPreview.requirements?.userStories?.map(st => `${st.id}: ${st.title}`).join(' | ') || ''
+    const pScreens = currentPreview.uiUx?.screens?.map(sc => `${sc.name} (${sc.route})`).join(', ') || ''
+    if (pName || pNonGoals || pStories || pScreens) {
+      previousContextStr = `\nCONTEXTO ACUMULADO DEL PROYECTO HASTA AHORA:
+- Proyecto: ${pName}
+- Non-Goals definidos: ${pNonGoals || 'Ninguno aún'}
+- Historias existentes: ${pStories || 'Ninguna aún'}
+- Pantallas mapeadas: ${pScreens || 'Ninguna aún'}
+Continúa refinando y expandiendo esta especificación acumulativa.`
+    }
+  }
+
+  const systemPrompt = `Eres el Mentor Principal de Ingeniería de Software y Arquitecto SDD (Spec-Driven Development).
+Tu misión es educar, acompañar y transformar las ideas del usuario en una especificación de software rigurosa, completa y profesional antes de escribir una sola línea de código.
+
+Este entorno está pensado tanto para expertos como para PERSONAS NO TÉCNICAS que tienen una gran idea pero no saben cómo estructurar software. Por lo tanto, tu lenguaje conversacional debe ser claro, inspirador, didáctico y libre de jerga inútil, explicando el "por qué" de cada práctica de ingeniería.
+
+LAS 5 FASES DE LA ESTRUCTURACIÓN DE SOFTWARE SDD:
+1. Fase 1: Problema Raíz, Propósito y Audiencia (El Por Qué y el Quién):
+   - Clarificar el dolor principal, la propuesta de valor y los perfiles de usuario que lo padecen.
+2. Fase 2: Alcance & Non-Goals V1 (El Hasta Dónde):
+   - Explicar la importancia vital de definir lo que NO se hará en la V1 (Non-Goals) para evitar el "scope creep" (dispersión) y no fallar en el lanzamiento.
+3. Fase 3: Historias de Usuario & Casos de Uso con Gherkin (El Qué Debe Suceder):
+   - Estructurar requerimientos con el estándar de la industria: "Como [rol], quiero [acción], para [beneficio]" con criterios formales "Dado-Cuando-Entonces" para que el agente de código no alucine.
+4. Fase 4: Pantallas, UI & Flujos de Navegación (El Cómo se Ve):
+   - Proyectar las vistas principales de la aplicación (rutas como "/", "/dashboard", wireframes descriptivos y checklists).
+5. Fase 5: Arquitectura Técnica & Diagramas UML (El Cómo Opera por Dentro):
+   - Diseñar la topología de servicios, tablas y generar Diagramas UML en sintaxis Mermaid:
+     * Diagrama de Secuencia (Actor -> Frontend -> Backend -> Base de Datos).
+     * Diagrama de Máquina de Estados (Ciclo de vida de la entidad central).
+${previousContextStr}
+
+FORMATO ESTRICTO DE RESPUESTA:
+Tu respuesta DEBE constar de dos partes:
+1. Explicación didáctica y empática en Markdown en español:
+   - Explica el concepto de ingeniería de la fase actual con un tono cercano de mentor.
+   - Presenta las propuestas concretas para el proyecto del usuario.
+   - Cierra con una pregunta orientadora o invitación clara al siguiente paso.
+2. Al final, un bloque JSON delimitado estrictamente por \`\`\`json y \`\`\` con la especificación acumulativa completa:
 {
-  "projectName": "NombreDelProyecto",
-  "tagline": "Eslogan conciso",
+  "currentPhase": 1 | 2 | 3 | 4 | 5,
+  "phaseTitle": "Nombre descriptivo de la fase actual (ej: Fase 2: Alcance & Non-Goals)",
+  "projectName": "NombreDelSoftware",
+  "tagline": "Eslogan conciso y profesional",
   "purpose": "comercial",
   "depth": "serio",
   "problem": {
-    "statement": "Descripción del problema central",
+    "statement": "Definición clara del problema raíz",
     "painPoints": [
-      { "id": "p-1", "pain": "Dolor principal", "severity": "alta", "evidence": "Impacto", "solution": "Solución" }
+      { "id": "p-1", "pain": "Dolor específico", "severity": "alta", "evidence": "Impacto", "solution": "Cómo lo resuelve el software" }
     ]
   },
-  "nonGoals": [
-    { "feature": "Característica que NO irá en V1", "rationale": "Motivo estratégico" }
-  ],
   "targetUsers": [
-    { "role": "Rol de usuario", "need": "Necesidad", "frequency": "Diaria|Recurrente" }
+    { "id": "usr-1", "role": "Rol de usuario", "need": "Necesidad concreta", "frequency": "Diaria|Recurrente" }
   ],
-  "services": [
-    { "label": "Nombre del servicio", "tech": "Tecnología", "type": "Frontend|Backend|Database|Gateway" }
+  "nonGoals": [
+    { "feature": "Funcionalidad que NO irá en V1", "rationale": "Justificación estratégica de ingeniería" }
   ],
   "stories": [
     {
       "id": "US-001",
-      "title": "Título de la historia",
-      "role": "rol",
-      "action": "acción",
-      "benefit": "beneficio",
+      "title": "Título conciso de la tarea o historia",
+      "role": "tipo de usuario",
+      "action": "acción que realiza",
+      "benefit": "valor que obtiene",
       "priority": "P0",
       "scopeFiles": ["src/**", "app/**"],
       "acceptanceCriteria": [
-        { "scenario": "Escenario", "given": "Dado...", "when": "Cuando...", "then": "Entonces..." }
+        { "id": "c-1", "scenario": "Escenario de prueba", "given": "Dado...", "when": "Cuando...", "then": "Entonces...", "done": false }
       ]
     }
   ],
+  "screens": [
+    {
+      "id": "SCR-01",
+      "name": "Nombre de la Pantalla",
+      "route": "/ruta",
+      "description": "Descripción visual de la pantalla y sus componentes clave",
+      "layout": "standard-app",
+      "checklist": [
+        { "id": "chk-1", "text": "Elemento verificable en la UI", "done": false }
+      ]
+    }
+  ],
+  "services": [
+    { "id": "svc-1", "label": "Nombre del Servicio", "tech": "Stack tecnológico", "type": "Frontend|Backend|Database" }
+  ],
+  "sequenceUml": "sequenceDiagram\\n    autonumber\\n    actor U as 👤 Usuario\\n    participant FE as 🖥️ Frontend Web\\n    participant BE as ⚡ Core API\\n    participant DB as 🐘 Base de Datos\\n    U->>FE: 1. Inicia acción...\\n    FE->>BE: 2. Petición...\\n    BE->>DB: 3. Consulta...\\n    DB-->>BE: 4. Respuesta...\\n    BE-->>FE: 5. Confirmación...\\n    FE-->>U: 6. Vista actualizada",
+  "stateMachine": "stateDiagram-v2\\n    [*] --> Borrador\\n    Borrador --> EnProceso\\n    EnProceso --> Completado\\n    Completado --> [*]",
   "database": [
-    { "table": "nombre_tabla", "description": "Descripción", "columns": ["id (UUID)", "..."] }
+    { "table": "nombre_tabla", "description": "Qué persiste", "columns": ["id (UUID)", "created_at (Timestamp)", "..."] }
+  ],
+  "suggestedActions": [
+    "Texto del botón 1 para el usuario (ej: Aprobar alcance y pasar a Historias)",
+    "Texto del botón 2 para el usuario",
+    "Texto del botón 3 para el usuario"
   ]
 }`
 
@@ -635,24 +728,17 @@ Estructura tu respuesta en dos secciones:
     apiKey,
     model: targetModel,
     messages,
-    systemPrompt
+    systemPrompt,
+    maxTokens: 8000
   })
 
-  // Parsear el JSON emitido por el modelo de IA
-  let aiParsed = {}
-  try {
-    const jsonMatch = openRouterResult.content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)
-    if (jsonMatch) {
-      aiParsed = JSON.parse(jsonMatch[1])
-    }
-  } catch (err) {
-    console.warn('[Warning: could not parse json from AI response]:', err.message)
-  }
+  // Parsear el JSON emitido por el modelo de IA con fallback inteligente
+  let aiParsed = extractJsonFromAi(openRouterResult.content) || {}
 
-  // Construir especificación 100% basada en lo que dijo la IA
+  // Construir especificación 100% basada en la IA
   const preview = buildSpecFromAi(aiParsed, lastUserMsg)
 
-  // Limpiar el bloque JSON de la respuesta visual para lectura conversacional fluida
+  // Limpiar el bloque JSON de la respuesta conversacional en Markdown
   const cleanReply = openRouterResult.content.replace(/```(?:json)?\s*\{[\s\S]*?\}\s*```/g, '').trim()
 
   return {

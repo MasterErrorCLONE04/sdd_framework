@@ -1,0 +1,245 @@
+<!-- 5. PERSPECTIVA ARQUITECTURA C4 (CANVAS INTERACTIVO FULL-BLEED) -->
+<main id="view-architecture" class="tab-content hidden w-full h-full flex-1 flex flex-col overflow-hidden">
+  <!-- Top Architecture Toolbar Bar -->
+  <div class="bg-white border-b border-zinc-200 px-5 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0 shadow-2xs z-20">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-indigo-800 text-white flex items-center justify-center shrink-0 shadow-xs">
+        <i data-lucide="cpu" class="w-4 h-4"></i>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h2 class="text-sm font-black text-zinc-950 tracking-tight">Arquitectura Macro C4</h2>
+          <span class="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 uppercase tracking-wider">Topología Viva</span>
+        </div>
+        <p class="text-[11px] text-zinc-500 font-normal">Lienzo espacial interactivo. Arrastra nodos libremente, inspecciona contratos y despacha tareas al agente.</p>
+      </div>
+    </div>
+
+    <!-- Canvas Controls -->
+    <div class="flex items-center gap-2 shrink-0">
+      <div class="bg-zinc-100 p-1 rounded-xl flex items-center gap-1 border border-zinc-200 text-xs font-bold">
+        <button id="arch-viewmode-canvas" onclick="setArchViewMode('canvas')" class="px-3 py-1.5 rounded-lg bg-white shadow-2xs text-purple-950 font-black flex items-center gap-1.5 transition-all cursor-pointer">
+          <i data-lucide="network" class="w-3.5 h-3.5 text-purple-600"></i>
+          <span>Canvas Visual</span>
+        </button>
+        <button id="arch-viewmode-grid" onclick="setArchViewMode('grid')" class="px-3 py-1.5 rounded-lg text-zinc-600 hover:text-zinc-950 flex items-center gap-1.5 transition-all cursor-pointer">
+          <i data-lucide="layout-grid" class="w-3.5 h-3.5"></i>
+          <span>Tarjetas</span>
+        </button>
+      </div>
+
+      <div class="flex items-center gap-1 bg-white border border-zinc-200 p-1 rounded-xl shadow-2xs">
+        <button onclick="openReverseEngineerModal()" title="Escanear e inferir arquitectura del código con IA" class="px-2.5 py-1.5 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 rounded-lg text-indigo-900 transition-colors flex items-center gap-1.5 text-xs font-bold cursor-pointer">
+          <i data-lucide="scan-search" class="w-3.5 h-3.5 text-indigo-600"></i>
+          <span class="hidden sm:inline">Re-Ingeniería IA</span>
+        </button>
+        <div class="w-px h-4 bg-zinc-200 mx-0.5"></div>
+        <button onclick="autoLayoutArch()" title="Auto-Organizar Componentes en Tiers" class="px-2.5 py-1.5 hover:bg-zinc-100 rounded-lg text-zinc-700 transition-colors flex items-center gap-1.5 text-xs font-bold cursor-pointer">
+          <i data-lucide="sparkles" class="w-3.5 h-3.5 text-purple-600"></i>
+          <span class="hidden sm:inline">Auto-Alinear</span>
+        </button>
+        <div class="w-px h-4 bg-zinc-200 mx-0.5"></div>
+        <button onclick="zoomArchCanvas(0.15)" title="Acercar (+)" class="p-1.5 hover:bg-zinc-100 rounded-lg text-zinc-700 transition-colors cursor-pointer">
+          <i data-lucide="zoom-in" class="w-4 h-4"></i>
+        </button>
+        <button onclick="zoomArchCanvas(-0.15)" title="Alejar (-)" class="p-1.5 hover:bg-zinc-100 rounded-lg text-zinc-700 transition-colors cursor-pointer">
+          <i data-lucide="zoom-out" class="w-4 h-4"></i>
+        </button>
+        <button onclick="resetArchCanvas()" title="Centrar Vista" class="p-1.5 hover:bg-zinc-100 rounded-lg text-zinc-700 transition-colors cursor-pointer">
+          <i data-lucide="maximize-2" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- VISUAL INTERACTIVE CANVAS WRAPPER (OCCUPIES 100% OF REMAINING VIEWPORT HEIGHT & WIDTH) -->
+  <div id="arch-canvas-container" class="relative bg-zinc-50 flex-1 w-full h-full overflow-hidden flex select-none">
+    
+    <!-- Interactive Canvas Stage -->
+    <div id="arch-canvas-stage" class="flex-1 h-full canvas-dot-grid overflow-hidden relative cursor-grab select-none">
+      
+      <!-- Transformable Viewport for Pan/Zoom -->
+      <div id="arch-viewport" class="absolute w-[4000px] h-[3000px] left-0 top-0 origin-top-left pointer-events-none">
+        <!-- Dynamic SVG wires layer -->
+        <svg id="arch-wires-svg" class="absolute inset-0 w-full h-full pointer-events-none z-0 overflow-visible"></svg>
+
+        <!-- Draggable Nodes Layer -->
+        <div id="arch-nodes-layer" class="absolute inset-0 z-10 pointer-events-none">
+          <!-- Draggable nodes injected here -->
+        </div>
+      </div>
+
+      <!-- Bottom Left Canvas Stats / Helper info -->
+      <div class="absolute bottom-4 left-4 z-20 bg-white/95 backdrop-blur-md border border-zinc-200/90 rounded-xl px-3 py-2 shadow-xs flex items-center gap-3 text-[11px] font-mono">
+        <span class="flex items-center gap-1.5 font-bold text-zinc-800">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span id="canvas-services-count">Servicios Activos</span>
+        </span>
+        <span class="text-zinc-300">|</span>
+        <span class="text-zinc-500">Zoom: <b id="arch-zoom-level" class="text-zinc-800">100%</b></span>
+        <span class="text-zinc-300">|</span>
+        <span class="text-purple-700 font-bold flex items-center gap-1">
+          <i data-lucide="move" class="w-3.5 h-3.5"></i>
+          Arrastra componentes libremente
+        </span>
+      </div>
+    </div>
+
+    <!-- SIDEBAR INSPECTOR DRAWER (Spatial Jira & Component Mission Control) -->
+    <div id="arch-inspector-drawer" class="w-96 md:w-[440px] bg-white border-l border-zinc-200 shrink-0 flex flex-col justify-between overflow-hidden hidden z-30 shadow-2xl select-text">
+      <!-- Drawer Sticky Header -->
+      <div class="p-4 border-b border-zinc-200 bg-zinc-50/70 space-y-3 shrink-0">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2.5 overflow-hidden">
+            <div id="inspector-icon" class="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0 border border-purple-200">
+              <i data-lucide="cpu" class="w-5 h-5"></i>
+            </div>
+            <div class="overflow-hidden">
+              <h3 id="inspector-title" class="text-sm font-black text-zinc-950 truncate">Servicio</h3>
+              <div class="flex items-center gap-1.5 mt-0.5">
+                <span id="inspector-type" class="text-[10px] font-mono text-zinc-600 uppercase font-bold bg-zinc-200/60 px-1.5 py-0.2 rounded">Frontend</span>
+                <span id="inspector-status-badge" class="text-[10px] font-mono font-bold uppercase px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800">ONLINE</span>
+              </div>
+            </div>
+          </div>
+          <button onclick="closeArchInspector()" class="text-zinc-400 hover:text-zinc-700 p-1.5 rounded-lg hover:bg-zinc-200/50 transition-colors cursor-pointer" title="Cerrar panel">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+
+        <!-- Segmented Navigation: Tasks (Jira) vs Specs -->
+        <div class="flex items-center gap-1 p-1 bg-zinc-200/60 rounded-xl text-xs font-bold">
+          <button id="btn-drawer-tab-tasks" onclick="setDrawerTab('tasks')" class="flex-1 py-1 px-2.5 rounded-lg bg-white text-zinc-950 shadow-2xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer">
+            <i data-lucide="check-square" class="w-3.5 h-3.5 text-purple-600"></i>
+            <span>Tareas & Jira (<span id="drawer-task-count">0</span>)</span>
+          </button>
+          <button id="btn-drawer-tab-specs" onclick="setDrawerTab('specs')" class="flex-1 py-1 px-2.5 rounded-lg text-zinc-600 hover:text-zinc-950 flex items-center justify-center gap-1.5 transition-all cursor-pointer">
+            <i data-lucide="sliders" class="w-3.5 h-3.5"></i>
+            <span>Especificación</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Drawer Scrollable Body -->
+      <div class="flex-1 overflow-y-auto p-4 space-y-4">
+        
+        <!-- SECTION 1: JIRA TASKS BOARD -->
+        <div id="drawer-section-tasks" class="space-y-4">
+          <!-- Action Bar: Add Task -->
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-xs font-black uppercase text-zinc-400 tracking-wider">Tareas del Componente</span>
+            <button id="btn-toggle-task-form" onclick="toggleTaskCreationForm()" class="px-3 py-1 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+              <span>Nueva Tarea para el Agente</span>
+            </button>
+          </div>
+
+          <!-- Inline Task Creation Form (Collapsible) -->
+          <div id="drawer-task-form" class="hidden bg-purple-50/50 border border-purple-200 rounded-2xl p-4 space-y-3 transition-all shadow-xs">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-black text-purple-950 flex items-center gap-1.5">
+                <i data-lucide="sparkles" class="w-3.5 h-3.5 text-purple-600"></i>
+                <span>Crear Tarea en este Componente</span>
+              </span>
+              <button onclick="toggleTaskCreationForm(false)" class="text-zinc-400 hover:text-zinc-700 text-xs cursor-pointer">✕</button>
+            </div>
+
+            <div class="space-y-1">
+              <label class="text-[10px] font-black uppercase text-zinc-500">¿Qué debe construir o cambiar el agente?</label>
+              <input id="new-task-title" type="text" placeholder="Ej: Implementar autenticación con Google OAuth" class="w-full text-xs p-2.5 rounded-xl border border-zinc-200 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium">
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+              <div class="space-y-1">
+                <label class="text-[10px] font-black uppercase text-zinc-500">Prioridad</label>
+                <select id="new-task-priority" class="w-full text-xs p-2 rounded-xl border border-zinc-200 bg-white font-medium">
+                  <option value="P0">P0 (Urgente / Bloqueante)</option>
+                  <option value="P1" selected>P1 (Alta Prioridad)</option>
+                  <option value="P2">P2 (Media)</option>
+                </select>
+              </div>
+              <div class="space-y-1">
+                <label class="text-[10px] font-black uppercase text-zinc-500">Archivos en Alcance</label>
+                <input id="new-task-files" type="text" placeholder="src/**, app/**" class="w-full text-xs p-2 rounded-xl border border-zinc-200 bg-white font-mono text-[11px]">
+              </div>
+            </div>
+
+            <div class="space-y-1">
+              <label class="text-[10px] font-black uppercase text-zinc-500">Criterio de Aceptación Gherkin (Dado-Cuando-Entonces)</label>
+              <textarea id="new-task-gherkin" rows="2" placeholder="Dado el usuario en login, cuando hace clic en Google, entonces accede al dashboard..." class="w-full text-xs p-2 rounded-xl border border-zinc-200 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium leading-relaxed"></textarea>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-1">
+              <button onclick="toggleTaskCreationForm(false)" class="px-3 py-1.5 rounded-xl text-xs font-bold text-zinc-600 hover:bg-zinc-200/50 cursor-pointer">
+                Cancelar
+              </button>
+              <button id="btn-submit-task" onclick="submitNodeTask()" class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-zinc-950 text-white hover:bg-zinc-800 transition-all cursor-pointer flex items-center gap-1.5 shadow-xs">
+                <i data-lucide="send" class="w-3.5 h-3.5 text-purple-400"></i>
+                <span>Crear Tarea en Backlog</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Stories List for this Node -->
+          <div id="drawer-node-stories-container" class="space-y-3">
+            <!-- Injected via JavaScript -->
+          </div>
+        </div>
+
+        <!-- SECTION 2: TECHNICAL SPECIFICATION -->
+        <div id="drawer-section-specs" class="space-y-4 hidden">
+          <div class="space-y-1.5">
+            <label class="text-[10px] font-black uppercase text-zinc-400 tracking-wider">Stack Tecnológico</label>
+            <div id="inspector-tech" class="text-xs font-mono font-bold text-indigo-700 bg-indigo-50/60 border border-indigo-100 p-2.5 rounded-xl">
+              Node.js
+            </div>
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="text-[10px] font-black uppercase text-zinc-400 tracking-wider">Descripción del Rol</label>
+            <p id="inspector-desc" class="text-xs text-zinc-600 leading-relaxed bg-zinc-50 p-3 rounded-xl border border-zinc-100">
+              Detalles del componente en la arquitectura
+            </p>
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="text-[10px] font-black uppercase text-zinc-400 tracking-wider">Estado de Salud</label>
+            <div class="flex items-center justify-between p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-mono font-bold text-emerald-800">
+              <span class="flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span id="inspector-status">ONLINE</span>
+              </span>
+              <span id="inspector-health">100% HEALTH</span>
+            </div>
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="text-[10px] font-black uppercase text-zinc-400 tracking-wider">Archivos en Alcance Blindados (ScopeFiles)</label>
+            <div id="inspector-files" class="space-y-1 text-[11px] font-mono">
+              <!-- scope files -->
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Drawer Sticky Footer -->
+      <div class="p-3 border-t border-zinc-200 bg-zinc-50/70 flex items-center justify-between gap-2 shrink-0">
+        <button onclick="switchTab('kanban')" class="flex-1 py-1.5 px-3 rounded-xl bg-white border border-zinc-200 text-zinc-700 text-xs font-bold hover:bg-zinc-100 transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs">
+          <i data-lucide="kanban" class="w-3.5 h-3.5 text-zinc-500"></i>
+          <span>Ver Tablero Kanban Global</span>
+        </button>
+        <button onclick="switchTab('sequences')" class="flex-1 py-1.5 px-3 rounded-xl bg-purple-50 text-purple-900 border border-purple-200 text-xs font-bold hover:bg-purple-100 transition-colors flex items-center justify-center gap-1.5 cursor-pointer">
+          <i data-lucide="workflow" class="w-3.5 h-3.5 text-purple-600"></i>
+          <span>Ver Secuencias UML →</span>
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ALTERNATIVE CARDS GRID (Hidden when in Canvas mode) -->
+  <div id="arch-cards-container" class="hidden flex-1 w-full p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <!-- Rendered cards -->
+  </div>
+</main>

@@ -1,0 +1,59 @@
+{
+  "id": "flow-01-startup",
+  "name": "Arranque y respuesta HTTP",
+  "description": "Secuencia mínima de inicio del servidor y atención de petición GET",
+  "priority": "P0",
+  "progress": 80,
+  "origin": "reverse_engineered",
+  "detectedAt": "2026-10-01T20:38:05.220Z",
+  "nodes": [
+    {
+      "id": "n-1",
+      "name": "Ejecución index.js",
+      "type": "API",
+      "status": "done",
+      "scopeFiles": [
+        "src/index.js"
+      ],
+      "checklist": [
+        {
+          "id": "t-1",
+          "text": "Se invoca punto de entrada",
+          "done": true
+        }
+      ]
+    },
+    {
+      "id": "n-2",
+      "name": "Inicialización server.js",
+      "type": "API",
+      "status": "done",
+      "scopeFiles": [
+        "src/server.js"
+      ],
+      "checklist": [
+        {
+          "id": "t-2",
+          "text": "Servidor HTTP escuchando",
+          "done": true
+        }
+      ]
+    },
+    {
+      "id": "n-3",
+      "name": "Operaciones BD en index.js",
+      "type": "Database",
+      "status": "in_progress",
+      "scopeFiles": [
+        "src/index.js"
+      ],
+      "checklist": [
+        {
+          "id": "t-3",
+          "text": "Conexión y queries ejecutadas",
+          "done": false
+        }
+      ]
+    }
+  ]
+}

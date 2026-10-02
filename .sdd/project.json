@@ -1,0 +1,8 @@
+{
+  "name": "sdd",
+  "tagline": "Análisis de ingeniería inversa sobre proyecto 'sdd' (JavaScript/TypeScript). La evidencia es extremadamente escasa: solo 2 archivos inspeccionados (server.js e index.js), sin rutas detectadas, sin modelos de BD detectados, sin pantallas detectadas. Se deduce una arquitectura mínima de servidor Node.js con posible conexión a base de datos. Muchos campos requieren evidencia adicional para completarse con rigor.",
+  "purpose": "interno",
+  "depth": "mvp",
+  "lastScannedAt": "2026-10-01T20:38:05.221Z",
+  "isBrownfieldScanned": true
+}

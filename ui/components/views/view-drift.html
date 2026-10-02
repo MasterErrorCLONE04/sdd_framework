@@ -1,0 +1,25 @@
+<!-- 9. PERSPECTIVA DERIVA (DRIFT) -->
+<main id="view-drift" class="tab-content hidden max-w-6xl mx-auto space-y-6">
+  <div class="bg-white border border-zinc-200 rounded-2xl p-6 shadow-xs space-y-4">
+    <div class="flex items-center justify-between">
+      <h2 class="text-lg font-black text-zinc-950 flex items-center gap-2">
+        <i data-lucide="git-compare" class="w-5 h-5 text-red-600"></i>
+        Auditoría de Deriva de Código (Scope Shield)
+      </h2>
+      <span id="drift-score-badge" class="px-2.5 py-1 rounded-full text-xs font-mono font-black bg-emerald-100 text-emerald-800">
+        Score: 100% Clean
+      </span>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="p-4 rounded-xl border border-emerald-200 bg-emerald-50/30">
+        <div class="text-xs font-black text-emerald-950 mb-2 uppercase">Archivos en Alcance (Permitidos):</div>
+        <div id="drift-in-scope" class="space-y-1 text-xs font-mono text-emerald-800"></div>
+      </div>
+      <div class="p-4 rounded-xl border border-rose-200 bg-rose-50/30">
+        <div class="text-xs font-black text-rose-950 mb-2 uppercase">Violaciones de Alcance (Fuera de Scope):</div>
+        <div id="drift-out-scope" class="space-y-1 text-xs font-mono text-rose-800"></div>
+      </div>
+    </div>
+  </div>
+</main>

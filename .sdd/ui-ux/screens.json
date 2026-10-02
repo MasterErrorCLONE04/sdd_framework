@@ -1,0 +1,24 @@
+[
+  {
+    "id": "SCR-01",
+    "name": "Página Principal (Home)",
+    "route": "/",
+    "previewUrl": "/",
+    "filePath": "ui/index.html",
+    "framework": "HTML5 Static Web",
+    "layout": "Página Web HTML",
+    "status": "done",
+    "healthPercent": 100,
+    "components": [
+      "Documento HTML"
+    ],
+    "wireframeDescription": "Página estática ui/index.html.",
+    "checklist": [
+      {
+        "id": "ui-2-1",
+        "text": "Archivo ui/index.html disponible",
+        "done": true
+      }
+    ]
+  }
+]

@@ -1,0 +1,32 @@
+{
+  "id": "core-sdd-entry",
+  "name": "Entrada Principal SDD",
+  "description": "Endpoint raíz del sistema SDD, punto de entrada general de la API",
+  "priority": "P1",
+  "progress": 100,
+  "origin": "ai_detected",
+  "detectedAt": "2026-10-01T17:28:34.790Z",
+  "nodes": [
+    {
+      "id": "node-1",
+      "name": "Request GET /api/sdd",
+      "type": "API",
+      "status": "done",
+      "scopeFiles": [
+        "src/server.js"
+      ],
+      "checklist": [
+        {
+          "id": "t-1",
+          "text": "Recibir petición GET en /api/sdd",
+          "done": true
+        },
+        {
+          "id": "t-2",
+          "text": "Retornar respuesta del estado del sistema SDD",
+          "done": true
+        }
+      ]
+    }
+  ]
+}

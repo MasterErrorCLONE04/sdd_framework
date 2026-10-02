@@ -1,0 +1,9 @@
+[
+  {
+    "id": "seq-01-startup",
+    "flowId": "flow-01-startup",
+    "name": "Secuencia: Arranque servidor + BD",
+    "description": "Flujo mínimo de inicio y operaciones de base de datos",
+    "mermaid": "sequenceDiagram\n    autonumber\n    actor D as 👨‍💻 Dev\n    participant I as 📄 index.js\n    participant S as 🖥️ server.js\n    participant DB as 🐘 BD\n    D->>I: npm start / node .\n    I->>S: Arranca servidor HTTP\n    S-->>I: Servidor escuchando\n    I->>DB: Operaciones BD\n    DB-->>I: Resultados\n    I-->>S: Respuestas\n    S-->>D: Servicio disponible"
+  }
+]

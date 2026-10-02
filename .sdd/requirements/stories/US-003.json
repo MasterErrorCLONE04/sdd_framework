@@ -1,0 +1,27 @@
+{
+  "id": "US-003",
+  "epicId": "EPIC-01",
+  "serviceId": "srv-node",
+  "title": "Operaciones contra base de datos",
+  "role": "Backend",
+  "action": "Ejecutar consultas/escrituras en BD",
+  "benefit": "Persistir/recuperar datos",
+  "points": 3,
+  "priority": "P1",
+  "status": "in_progress",
+  "progress": 40,
+  "origin": "reverse_engineered",
+  "detectedAt": "2026-10-01T20:38:05.218Z",
+  "scopeFiles": [
+    "src/index.js"
+  ],
+  "acceptanceCriteria": [
+    {
+      "id": "c-3",
+      "scenario": "Index.js realiza operaciones de BD",
+      "given": "Conexión a BD configurada",
+      "when": "Se invoca lógica de index.js",
+      "then": "Se ejecutan operaciones contra la base de datos"
+    }
+  ]
+}

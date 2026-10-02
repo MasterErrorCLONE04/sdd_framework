@@ -1,0 +1,167 @@
+<!-- REVERSE ENGINEERING MODAL (Brownfield Deep AI Scan) -->
+<div id="modal-reverse-engineer" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/60 backdrop-blur-xs p-4 select-none">
+  <div class="bg-white border border-zinc-200 rounded-3xl w-full max-w-xl p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
+    
+    <!-- Modal Header -->
+    <div class="flex items-start justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-700 flex items-center justify-center shrink-0 shadow-xs">
+          <i data-lucide="scan" class="w-5 h-5 text-indigo-600"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h3 class="text-base font-black text-zinc-950 tracking-tight">Ingeniería Inversa con IA</h3>
+            <span class="text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+              Brownfield Scanner
+            </span>
+          </div>
+          <p class="text-xs text-zinc-500 mt-0.5 leading-snug font-normal">
+            Escaneo profundo de código fuente existente sin heurísticas simuladas.
+          </p>
+        </div>
+      </div>
+      <button onclick="closeReverseEngineerModal()" class="text-zinc-400 hover:text-zinc-700 p-1.5 rounded-xl hover:bg-zinc-100 transition-colors cursor-pointer">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <!-- Description & Evidence Sources -->
+    <div id="re-intro-section" class="space-y-3.5">
+      <div class="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200/80 text-xs text-zinc-600 leading-relaxed font-normal">
+        La IA inspeccionará los archivos de tu repositorio para deducir de forma fundamentada qué hace tu software:
+      </div>
+
+      <div class="grid grid-cols-2 gap-2 text-xs">
+        <div class="p-2.5 rounded-xl bg-purple-50/50 border border-purple-200/70 space-y-1">
+          <div class="font-bold text-purple-950 flex items-center gap-1.5 text-[11px]">
+            <i data-lucide="route" class="w-3.5 h-3.5 text-purple-600"></i>
+            <span>Rutas & Controladores</span>
+          </div>
+          <p class="text-[10px] text-zinc-500">FastAPI, Express, Next.js, Django, endpoints de API</p>
+        </div>
+        <div class="p-2.5 rounded-xl bg-emerald-50/50 border border-emerald-200/70 space-y-1">
+          <div class="font-bold text-emerald-950 flex items-center gap-1.5 text-[11px]">
+            <i data-lucide="database" class="w-3.5 h-3.5 text-emerald-600"></i>
+            <span>Modelos & Esquemas ORM</span>
+          </div>
+          <p class="text-[10px] text-zinc-500">Prisma, Mongoose, TypeORM, SQLAlchemy o SQL DDL</p>
+        </div>
+        <div class="p-2.5 rounded-xl bg-indigo-50/50 border border-indigo-200/70 space-y-1">
+          <div class="font-bold text-indigo-950 flex items-center gap-1.5 text-[11px]">
+            <i data-lucide="monitor" class="w-3.5 h-3.5 text-indigo-600"></i>
+            <span>Vistas & Pantallas UI</span>
+          </div>
+          <p class="text-[10px] text-zinc-500">Páginas de usuario, layouts y componentes frontend</p>
+        </div>
+        <div class="p-2.5 rounded-xl bg-amber-50/50 border border-amber-200/70 space-y-1">
+          <div class="font-bold text-amber-950 flex items-center gap-1.5 text-[11px]">
+            <i data-lucide="network" class="w-3.5 h-3.5 text-amber-600"></i>
+            <span>Servicios & Arquitectura C4</span>
+          </div>
+          <p class="text-[10px] text-zinc-500">Manifests, contenedores Docker y tiers del sistema</p>
+        </div>
+      </div>
+
+      <div class="p-3 rounded-2xl bg-purple-50/80 border border-purple-200 text-xs flex items-center justify-between">
+        <span class="text-[11px] font-bold text-purple-900 flex items-center gap-1.5">
+          <i data-lucide="sparkles" class="w-3.5 h-3.5 text-purple-600"></i>
+          <span>Modelo de Razonamiento IA:</span>
+        </span>
+        <span id="re-model-label" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-white text-purple-800 border border-purple-200">
+          Ling 3.0 Flash (100% Gratis)
+        </span>
+      </div>
+    </div>
+
+    <!-- Live Execution Pipeline Progress (Hidden initially) -->
+    <div id="re-pipeline-container" class="hidden space-y-3 p-4 rounded-2xl bg-zinc-50 border border-zinc-200">
+      <div class="flex items-center justify-between text-xs">
+        <span id="re-pipeline-status-text" class="font-black text-purple-950 flex items-center gap-2">
+          <i data-lucide="loader-2" class="w-4 h-4 text-purple-600 animate-spin"></i>
+          <span>Inspeccionando repositorio...</span>
+        </span>
+        <span id="re-pipeline-pct" class="text-[11px] font-mono font-bold text-purple-700">25%</span>
+      </div>
+
+      <!-- Progress bar -->
+      <div class="h-2 w-full bg-zinc-200 rounded-full overflow-hidden">
+        <div id="re-pipeline-bar" class="h-full bg-gradient-to-r from-purple-600 via-indigo-600 to-emerald-500 rounded-full transition-all duration-500" style="width: 25%;"></div>
+      </div>
+
+      <!-- Step Checklist -->
+      <div class="space-y-2 pt-2 text-[11px] font-mono">
+        <div id="re-step-1" class="flex items-center gap-2 text-purple-700 font-bold">
+          <i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i>
+          <span>[1/4] Leyendo rutas, controladores y modelos del proyecto</span>
+        </div>
+        <div id="re-step-2" class="flex items-center gap-2 text-zinc-400">
+          <i data-lucide="circle" class="w-3.5 h-3.5"></i>
+          <span>[2/4] Enviando evidencia real al modelo de IA</span>
+        </div>
+        <div id="re-step-3" class="flex items-center gap-2 text-zinc-400">
+          <i data-lucide="circle" class="w-3.5 h-3.5"></i>
+          <span>[3/4] Reconstruyendo historias Jira, esquemas ERD y diagramas UML</span>
+        </div>
+        <div id="re-step-4" class="flex items-center gap-2 text-zinc-400">
+          <i data-lucide="circle" class="w-3.5 h-3.5"></i>
+          <span>[4/4] Sincronizando especificación en disco (.sdd/ y AGENTS.md)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Final Results Summary Card (Hidden initially) -->
+    <div id="re-results-container" class="hidden p-4 rounded-2xl bg-emerald-50 border border-emerald-200 space-y-3">
+      <div class="flex items-center gap-2 text-xs font-black text-emerald-950">
+        <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i>
+        <span>¡Ingeniería Inversa Completada Exitosamente!</span>
+      </div>
+      <p id="re-results-summary" class="text-xs text-emerald-900 leading-relaxed font-normal">
+        Se reconstruyó la especificación de software completa a partir del código fuente.
+      </p>
+      <div class="grid grid-cols-4 gap-2 pt-1 text-center">
+        <div class="bg-white p-2 rounded-xl border border-emerald-200 shadow-2xs">
+          <div id="re-stat-stories" class="text-base font-black text-emerald-900">0</div>
+          <div class="text-[9px] font-mono text-zinc-500 uppercase font-bold">Historias</div>
+        </div>
+        <div class="bg-white p-2 rounded-xl border border-emerald-200 shadow-2xs">
+          <div id="re-stat-services" class="text-base font-black text-emerald-900">0</div>
+          <div class="text-[9px] font-mono text-zinc-500 uppercase font-bold">Servicios</div>
+        </div>
+        <div class="bg-white p-2 rounded-xl border border-emerald-200 shadow-2xs">
+          <div id="re-stat-tables" class="text-base font-black text-emerald-900">0</div>
+          <div class="text-[9px] font-mono text-zinc-500 uppercase font-bold">Tablas ERD</div>
+        </div>
+        <div class="bg-white p-2 rounded-xl border border-emerald-200 shadow-2xs">
+          <div id="re-stat-flows" class="text-base font-black text-emerald-900">0</div>
+          <div class="text-[9px] font-mono text-zinc-500 uppercase font-bold">Flujos</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Footer Actions -->
+    <div class="flex items-center justify-end gap-2.5 pt-2 border-t border-zinc-100">
+      <button onclick="closeReverseEngineerModal()" class="px-3.5 py-2 rounded-xl text-xs font-bold text-zinc-600 hover:bg-zinc-100 transition-colors cursor-pointer">
+        Cerrar
+      </button>
+
+      <button
+        id="btn-start-reverse-engineer"
+        onclick="startReverseEngineeringWithAi()"
+        class="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold flex items-center gap-2 shadow-md shadow-purple-600/25 active:scale-95 transition-all cursor-pointer"
+      >
+        <i data-lucide="zap" class="w-4 h-4 text-amber-300"></i>
+        <span>Iniciar Escaneo con IA</span>
+      </button>
+
+      <button
+        id="btn-view-re-results"
+        onclick="finishAndRefreshWorkbench()"
+        class="hidden px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-2 shadow-md shadow-emerald-600/25 active:scale-95 transition-all cursor-pointer"
+      >
+        <i data-lucide="layout-dashboard" class="w-4 h-4 text-white"></i>
+        <span>Ver Resultados en Workbench</span>
+      </button>
+    </div>
+
+  </div>
+</div>

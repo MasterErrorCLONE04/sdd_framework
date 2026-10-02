@@ -1,0 +1,91 @@
+<!-- 10. PERSPECTIVA UI/UX -->
+<main id="view-uiux" class="tab-content hidden max-w-6xl mx-auto space-y-6">
+  <!-- Header Banner & Action Bar -->
+  <div class="bg-white border border-zinc-200 rounded-2xl p-6 shadow-xs space-y-5">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div class="space-y-1">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-pink-50 border border-pink-200/80 flex items-center justify-center text-pink-600 shrink-0">
+            <i data-lucide="layout" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h2 class="text-base font-black text-zinc-950 flex items-center gap-2">
+              <span>Catálogo de Pantallas & Wireframes (UI/UX)</span>
+              <span id="uiux-badge-count" class="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-pink-100 text-pink-800">0 vistas</span>
+            </h2>
+            <p class="text-xs text-zinc-500">Mapeo automático de páginas, rutas reales y componentes detectados en el proyecto.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button
+          id="btn-rescan-uiux"
+          onclick="rescanUiuxViews()"
+          class="px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold flex items-center gap-2 transition-all shadow-xs cursor-pointer active:scale-95"
+          title="Volver a escanear archivos del proyecto en busca de nuevas vistas y componentes"
+        >
+          <i data-lucide="scan" class="w-4 h-4 text-pink-400"></i>
+          <span id="btn-rescan-uiux-label">Re-escanear Vistas</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Metric Counter Bar -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-zinc-100">
+      <div class="p-3 rounded-xl bg-zinc-50 border border-zinc-200/80 flex items-center justify-between">
+        <div class="space-y-0.5">
+          <span class="text-[10px] font-mono uppercase text-zinc-500 font-bold">Total Vistas</span>
+          <div id="uiux-stat-total" class="text-base font-black text-zinc-900">0</div>
+        </div>
+        <i data-lucide="layout-grid" class="w-4 h-4 text-zinc-400"></i>
+      </div>
+
+      <div class="p-3 rounded-xl bg-purple-50/60 border border-purple-200/60 flex items-center justify-between">
+        <div class="space-y-0.5">
+          <span class="text-[10px] font-mono uppercase text-purple-700 font-bold">Rutas Dinámicas</span>
+          <div id="uiux-stat-dynamic" class="text-base font-black text-purple-950">0</div>
+        </div>
+        <i data-lucide="variable" class="w-4 h-4 text-purple-400"></i>
+      </div>
+
+      <div class="p-3 rounded-xl bg-pink-50/60 border border-pink-200/60 flex items-center justify-between">
+        <div class="space-y-0.5">
+          <span class="text-[10px] font-mono uppercase text-pink-700 font-bold">Componentes</span>
+          <div id="uiux-stat-components" class="text-base font-black text-pink-950">0</div>
+        </div>
+        <i data-lucide="component" class="w-4 h-4 text-pink-400"></i>
+      </div>
+
+      <div class="p-3 rounded-xl bg-emerald-50/60 border border-emerald-200/60 flex items-center justify-between">
+        <div class="space-y-0.5">
+          <span class="text-[10px] font-mono uppercase text-emerald-700 font-bold">Salud UI</span>
+          <div id="uiux-stat-health" class="text-base font-black text-emerald-950">100%</div>
+        </div>
+        <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500"></i>
+      </div>
+    </div>
+
+    <!-- Filter & Search Controls -->
+    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+      <div class="relative flex-1">
+        <i data-lucide="search" class="w-4 h-4 text-zinc-400 absolute left-3 top-2.5"></i>
+        <input
+          type="text"
+          id="uiux-search-input"
+          oninput="filterUiuxScreens(this.value)"
+          placeholder="Filtrar por nombre, ruta (/tienda), archivo (page.tsx) o componente..."
+          class="w-full bg-zinc-50 border border-zinc-200 rounded-xl pl-9 pr-3 py-1.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-pink-500"
+        />
+      </div>
+      <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+        <button onclick="setUiuxFilter('all')" id="uiux-filter-all" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-pink-100 text-pink-900 border border-pink-300 cursor-pointer">Todas</button>
+        <button onclick="setUiuxFilter('dynamic')" id="uiux-filter-dynamic" class="px-2.5 py-1 rounded-lg text-xs font-bold text-zinc-600 hover:bg-zinc-100 border border-zinc-200 cursor-pointer">Dinámicas [id]</button>
+        <button onclick="setUiuxFilter('static')" id="uiux-filter-static" class="px-2.5 py-1 rounded-lg text-xs font-bold text-zinc-600 hover:bg-zinc-100 border border-zinc-200 cursor-pointer">Estáticas</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Screens Grid -->
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" id="uiux-screens-container"></div>
+</main>

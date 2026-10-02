@@ -1,0 +1,15 @@
+<!-- FULLSCREEN MORPHING TRANSITION OVERLAY (LIGHT MODE WITH RICH PURPLE ACCENT) -->
+<div id="morph-transition-overlay" class="hidden fixed inset-0 z-50 bg-white/95 backdrop-blur-xl flex flex-col items-center justify-center text-center p-6 space-y-6 transition-all duration-500 select-none">
+  <div class="w-20 h-20 rounded-3xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-purple-800 text-white flex items-center justify-center shadow-2xl shadow-purple-600/30 animate-pulse ring-4 ring-purple-100">
+    <i data-lucide="zap" class="w-10 h-10 text-white"></i>
+  </div>
+  <div class="space-y-2 max-w-md">
+    <h2 id="morph-overlay-title" class="text-2xl font-black text-zinc-950 tracking-tight">Compilando 12 Perspectivas SDD...</h2>
+    <p id="morph-overlay-desc" class="text-xs text-zinc-600 leading-relaxed font-normal">
+      Escribiendo especificaciones atómicas en <code class="text-purple-700 font-mono font-bold">.sdd/</code> y directivas de gobernanza en <code class="text-emerald-700 font-mono font-bold">AGENTS.md</code>...
+    </p>
+  </div>
+  <div class="w-64 h-2 bg-zinc-200 rounded-full overflow-hidden">
+    <div id="morph-progress-bar" class="h-full bg-gradient-to-r from-purple-600 to-indigo-600 rounded-full transition-all duration-700" style="width: 25%;"></div>
+  </div>
+</div>

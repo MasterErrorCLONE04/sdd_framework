@@ -1,0 +1,24 @@
+<!-- Agent Dispatch Modal -->
+<div id="dispatch-modal" class="fixed inset-0 bg-zinc-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 hidden">
+  <div class="bg-white border border-zinc-200 rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-4">
+    <div class="flex items-center justify-between">
+      <h3 id="modal-title" class="text-sm font-black text-zinc-950 uppercase tracking-wider flex items-center gap-2">
+        <i data-lucide="bot" class="w-4 h-4 text-zinc-900"></i>
+        Despacho a Agente de IA
+      </h3>
+      <button onclick="closeDispatchModal()" class="text-zinc-400 hover:text-zinc-700 cursor-pointer">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <div id="modal-content" class="text-xs text-zinc-600 leading-relaxed space-y-2"></div>
+
+    <div class="flex justify-end gap-2 pt-2">
+      <button onclick="closeDispatchModal()" class="px-3 py-1.5 rounded-lg text-xs font-bold border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 cursor-pointer">Cerrar</button>
+      <button id="modal-action-btn" onclick="copyPromptText()" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-zinc-900 text-white hover:bg-zinc-800 flex items-center gap-1.5 cursor-pointer">
+        <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+        <span>Copiar Prompt</span>
+      </button>
+    </div>
+  </div>
+</div>

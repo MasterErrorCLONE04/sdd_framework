@@ -1,0 +1,33 @@
+{
+  "taskId": "task-US-002-1790885570578",
+  "storyId": "US-002",
+  "serviceId": "core-app",
+  "title": "Implementar soporte de atajos de teclado",
+  "assignedTo": "Antigravity",
+  "status": "in_progress",
+  "scopeFiles": [
+    "/api/sdd",
+    "/api/sdd/scan",
+    "/api/uiux/rescan",
+    "/api/flows/discover-ai",
+    "/api/stories",
+    "/api/stories/dispatch",
+    "/api/genesis/synthesize",
+    "/api/genesis/scaffold",
+    "/api/genesis/chat",
+    "/api/openrouter/config"
+  ],
+  "acceptanceCriteria": [
+    {
+      "id": "c-1",
+      "scenario": "Verificación del requerimiento",
+      "given": "el usuario en la aplicación",
+      "when": "Dado el usuario en el canvas, cuando presiona Espacio, entonces puede arrastrar el lienzo",
+      "then": "el sistema responde de forma exitosa y sin regresiones",
+      "done": false
+    }
+  ],
+  "dispatchedAt": "2026-10-01T20:12:50.575Z",
+  "projectRoot": "C:\\Users\\Usuario\\Desktop\\sdd",
+  "instruction": "Antigravity Agent, tienes asignada la tarea US-002: \"Implementar soporte de atajos de teclado\". Modifica ÚNICAMENTE los archivos en scopeFiles y verifica los criterios Dado-Cuando-Entonces."
+}

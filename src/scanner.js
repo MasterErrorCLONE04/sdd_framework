@@ -113,6 +113,31 @@ export function scanProject(projectRoot = process.cwd()) {
     }
   }
 
+  // 3.1 Scan entrypoint server files for inline route definitions (Express, Fastify, Vanilla HTTP)
+  const serverEntryFiles = [
+    path.join(projectRoot, 'src', 'server.js'),
+    path.join(projectRoot, 'server.js'),
+    path.join(projectRoot, 'src', 'app.js'),
+    path.join(projectRoot, 'app.js'),
+    path.join(projectRoot, 'src', 'index.js'),
+    path.join(projectRoot, 'index.js')
+  ]
+  for (const sFile of serverEntryFiles) {
+    if (fs.existsSync(sFile)) {
+      try {
+        const sContent = fs.readFileSync(sFile, 'utf-8')
+        const expressMatches = sContent.matchAll(/\b(?:app|router)\.(?:get|post|put|patch|delete)\s*\(\s*['"`]([^'"`]+)['"`]/g)
+        for (const m of expressMatches) {
+          if (!findings.detectedRoutes.includes(m[1])) findings.detectedRoutes.push(m[1])
+        }
+        const vanillaMatches = sContent.matchAll(/pathname\s*===?\s*['"`](\/api\/[^'"`]+)['"`]/g)
+        for (const m of vanillaMatches) {
+          if (!findings.detectedRoutes.includes(m[1])) findings.detectedRoutes.push(m[1])
+        }
+      } catch {}
+    }
+  }
+
   // 4. Synthesize inferred architecture
   findings.inferredArchitecture.services.push({
     id: 'core-app',
@@ -457,17 +482,18 @@ export function scanProjectViews(projectRoot = process.cwd()) {
 
   // 5. HTML estáticos de fallback
   if (screens.length === 0) {
-    const htmlFiles = ['index.html', 'dashboard.html', 'login.html', 'checkout.html', 'pricing.html', 'about.html']
+    const htmlFiles = ['index.html', 'ui/index.html', 'public/index.html', 'dashboard.html', 'login.html', 'checkout.html', 'pricing.html', 'about.html']
     for (const hf of htmlFiles) {
       const hp = path.join(projectRoot, hf)
       if (fs.existsSync(hp)) {
-        const route = hf === 'index.html' ? '/' : '/' + hf.replace('.html', '')
+        const route = hf.endsWith('index.html') ? '/' : '/' + path.basename(hf, '.html')
+        const relPath = hf.replace(/\\/g, '/')
         screens.push({
           id: getScreenId(),
-          name: formatScreenName(route, hf),
+          name: formatScreenName(route, relPath),
           route,
           previewUrl: route,
-          filePath: hf,
+          filePath: relPath,
           framework: 'HTML5 Static Web',
           layout: 'Página Web HTML',
           status: 'done',

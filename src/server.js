@@ -7,6 +7,8 @@ import { fileURLToPath } from 'url'
 import { exec, execSync } from 'child_process'
 import { scanProject, scanProjectViews } from './scanner.js'
 import { scaffoldGenesis, processGenesisChat } from './genesis.js'
+import { discoverFlowsWithAi } from './flows-ai.js'
+import { reverseEngineerProjectWithAi } from './reverse-engineer.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -265,7 +267,24 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
           flows = files.map(f => readJsonFile(path.join(flowsDir, f))).filter(Boolean)
         }
 
-        const architecture = readJsonFile(path.join(sddDir, 'architecture.json'), { services: [] })
+        let architecture = readJsonFile(path.join(sddDir, 'architecture.json'))
+        if (!architecture || !Array.isArray(architecture.services) || architecture.services.length === 0) {
+          const scan = scanProject(projectRoot)
+          const detectedServices = scan.inferredArchitecture?.services ? [...scan.inferredArchitecture.services] : []
+          if (fs.existsSync(path.join(projectRoot, 'ui', 'index.html')) && !detectedServices.some(s => s.id === 'studio-ui')) {
+            detectedServices.unshift({
+              id: 'studio-ui',
+              label: 'SDD Studio Web UI',
+              type: 'Frontend Client',
+              status: 'online',
+              tech: 'HTML5 / ES Modules / Tailwind',
+              healthPercent: 100,
+              description: 'Lienzo interactivo, cabina de control y centro de mando para el agente.'
+            })
+          }
+          architecture = { services: detectedServices }
+          writeJsonFile(path.join(sddDir, 'architecture.json'), architecture)
+        }
         const database = readJsonFile(path.join(dbDir, 'schema-erd.json'), {})
         const testPlan = readJsonFile(path.join(qaDir, 'test-plan.json'), {})
         // Carga y normalización de Secuencias UML vinculadas a Flujos
@@ -346,6 +365,9 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
         const taskFile = path.join(sddDir, 'genesis_task.json')
         const genesisTask = fs.existsSync(taskFile) ? readJsonFile(taskFile) : null
 
+        const activeTaskFile = path.join(sddDir, 'active_task.json')
+        const activeTask = fs.existsSync(activeTaskFile) ? readJsonFile(activeTaskFile) : null
+
         const isNewProject = !fs.existsSync(path.join(sddDir, 'project.json')) || userStories.length === 0
 
         const payload = {
@@ -354,6 +376,7 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
           workspacePath: projectRoot,
           project,
           genesisTask,
+          activeTask,
           core: { problem, targetUsers, scopeBoundaries, successCriteria, risks },
           discovery: { interviews, hypotheses, competitors },
           manifest: {
@@ -522,13 +545,33 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
                 if (c) c.done = Boolean(body.done)
               }
               if (body.assignedTo) story.assignedTo = body.assignedTo
-              if (body.status) story.status = body.status
+              if (body.status === 'done') {
+                story.status = 'done'
+                story.progress = 100
+                if (Array.isArray(story.acceptanceCriteria)) {
+                  story.acceptanceCriteria.forEach(c => { c.done = true })
+                }
+              } else {
+                const total = story.acceptanceCriteria?.length || 0
+                const doneCount = story.acceptanceCriteria?.filter(item => item.done).length || 0
+                story.progress = total > 0 ? Math.round((doneCount / total) * 100) : 0
+                if (total > 0 && doneCount === total) story.status = 'done'
+                else if (doneCount > 0) story.status = 'in_progress'
+              }
 
-              const total = story.acceptanceCriteria?.length || 0
-              const doneCount = story.acceptanceCriteria?.filter(item => item.done).length || 0
-              story.progress = total > 0 ? Math.round((doneCount / total) * 100) : (story.status === 'done' ? 100 : 0)
-              if (total > 0 && doneCount === total) story.status = 'done'
-              else if (doneCount > 0) story.status = 'in_progress'
+              // Si la historia fue completada, actualizar active_task.json si corresponde
+              if (story.status === 'done') {
+                const activeTaskFile = path.join(sddDir, 'active_task.json')
+                if (fs.existsSync(activeTaskFile)) {
+                  const active = readJsonFile(activeTaskFile)
+                  if (active && active.storyId === story.id) {
+                    active.status = 'done'
+                    active.completedAt = new Date().toISOString()
+                    writeJsonFile(activeTaskFile, active)
+                    console.log(`\n✅ [SDD_AGENT_TASK_COMPLETED]: ${story.id} ("${story.title}")`)
+                  }
+                }
+              }
 
               writeJsonFile(storyFile, story)
 
@@ -642,6 +685,232 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
       writeJsonFile(path.join(uiDir, 'screens.json'), merged)
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ success: true, count: merged.length, screens: merged }))
+      return
+    }
+
+    // 3.06 Discover Business Flows with AI POST /api/flows/discover-ai (100% IA sobre código real)
+    if (url.pathname === '/api/flows/discover-ai' && req.method === 'POST') {
+      let bodyData = ''
+      req.on('data', chunk => { bodyData += chunk })
+      req.on('end', async () => {
+        try {
+          const { apiKey, model } = JSON.parse(bodyData || '{}')
+          const orConfig = getOpenRouterConfig(projectRoot)
+          const effectiveKey = apiKey || orConfig.apiKey
+          const effectiveModel = model || orConfig.defaultModel
+          const result = await discoverFlowsWithAi({
+            projectRoot,
+            apiKey: effectiveKey,
+            model: effectiveModel
+          })
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: true, ...result }))
+        } catch (err) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: err.message }))
+        }
+      })
+      return
+    }
+
+    // 3.07 Create Story Linked to Architecture Node POST /api/stories
+    if (url.pathname === '/api/stories' && req.method === 'POST') {
+      let bodyData = ''
+      req.on('data', chunk => { bodyData += chunk })
+      req.on('end', () => {
+        try {
+          const {
+            serviceId = 'core-app',
+            title,
+            role = 'usuario',
+            action = 'ejecutar la funcionalidad correspondiente',
+            benefit = 'cumplir con el objetivo del negocio',
+            priority = 'P0',
+            scopeFiles = [],
+            acceptanceCriteria = [],
+            epicId = 'EPIC-01'
+          } = JSON.parse(bodyData || '{}')
+
+          if (!title || !title.trim()) {
+            res.writeHead(400, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ error: 'El título de la tarea/historia es requerido' }))
+            return
+          }
+
+          if (!fs.existsSync(storiesDir)) fs.mkdirSync(storiesDir, { recursive: true })
+          if (!fs.existsSync(reqDir)) fs.mkdirSync(reqDir, { recursive: true })
+
+          let maxId = 0
+          const files = fs.readdirSync(storiesDir).filter(f => f.startsWith('US-') && f.endsWith('.json'))
+          files.forEach(f => {
+            const m = f.match(/US-(\d+)\.json/)
+            if (m) {
+              const num = parseInt(m[1], 10)
+              if (num > maxId) maxId = num
+            }
+          })
+          const nextNum = maxId + 1
+          const storyId = `US-${String(nextNum).padStart(3, '0')}`
+
+          const criteria = Array.isArray(acceptanceCriteria) && acceptanceCriteria.length > 0
+            ? acceptanceCriteria.map((c, i) => ({
+                id: c.id || `c-${i + 1}`,
+                scenario: c.scenario || 'Criterio de verificación',
+                given: c.given || 'el usuario en la aplicación',
+                when: c.when || 'ejecuta la acción',
+                then: c.then || 'el sistema responde con éxito',
+                done: Boolean(c.done)
+              }))
+            : [
+                {
+                  id: 'c-1',
+                  scenario: 'Comportamiento esperado',
+                  given: 'el usuario en el sistema',
+                  when: `ejecuta la tarea "${title.trim()}"`,
+                  then: 'el sistema responde de forma exitosa y sin regresiones',
+                  done: false
+                }
+              ]
+
+          const newStory = {
+            id: storyId,
+            epicId: epicId || 'EPIC-01',
+            serviceId: serviceId || 'core-app',
+            title: title.trim(),
+            role: role.trim(),
+            action: action.trim(),
+            benefit: benefit.trim(),
+            points: 3,
+            priority: priority || 'P0',
+            status: 'backlog',
+            progress: 0,
+            origin: 'workbench',
+            createdAt: new Date().toISOString(),
+            scopeFiles: Array.isArray(scopeFiles) && scopeFiles.length > 0 ? scopeFiles : ['src/**', 'app/**'],
+            acceptanceCriteria: criteria
+          }
+
+          // Guardar archivo individual atómico
+          writeJsonFile(path.join(storiesDir, `${storyId}.json`), newStory)
+
+          // Actualizar archivo agrupado user-stories.json
+          const sPath = path.join(reqDir, 'user-stories.json')
+          let allStories = readJsonFile(sPath, [])
+          if (!Array.isArray(allStories)) allStories = []
+          allStories.push(newStory)
+          writeJsonFile(sPath, allStories)
+
+          console.log(`\n📋 [NUEVA_TAREA_CREADA]: ${storyId} ("${newStory.title}") en componente "${serviceId}"`)
+
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: true, story: newStory }))
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: err.message }))
+        }
+      })
+      return
+    }
+
+    // 3.08 Dispatch Story to Agent POST /api/stories/dispatch
+    if (url.pathname === '/api/stories/dispatch' && req.method === 'POST') {
+      let bodyData = ''
+      req.on('data', chunk => { bodyData += chunk })
+      req.on('end', () => {
+        try {
+          const { storyId, assignedTo = 'Antigravity' } = JSON.parse(bodyData || '{}')
+          if (!storyId) {
+            res.writeHead(400, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ error: 'storyId es requerido' }))
+            return
+          }
+
+          const storyFile = path.join(storiesDir, `${storyId}.json`)
+          let story = readJsonFile(storyFile)
+          if (!story) {
+            const sPath = path.join(reqDir, 'user-stories.json')
+            const arr = readJsonFile(sPath, [])
+            story = arr.find(s => s.id === storyId)
+          }
+
+          if (!story) {
+            res.writeHead(404, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ error: `Historia ${storyId} no encontrada` }))
+            return
+          }
+
+          story.status = 'in_progress'
+          story.assignedTo = assignedTo
+          story.dispatchedAt = new Date().toISOString()
+          writeJsonFile(storyFile, story)
+
+          // Actualizar en user-stories.json
+          const sPath = path.join(reqDir, 'user-stories.json')
+          if (fs.existsSync(sPath)) {
+            const arr = readJsonFile(sPath, [])
+            const idx = arr.findIndex(s => s.id === storyId)
+            if (idx !== -1) {
+              arr[idx] = story
+              writeJsonFile(sPath, arr)
+            }
+          }
+
+          // Escribir active_task.json para consumo del Agente
+          const activeTask = {
+            taskId: `task-${story.id}-${Date.now()}`,
+            storyId: story.id,
+            serviceId: story.serviceId,
+            title: story.title,
+            assignedTo: assignedTo,
+            status: 'in_progress',
+            scopeFiles: story.scopeFiles,
+            acceptanceCriteria: story.acceptanceCriteria,
+            dispatchedAt: story.dispatchedAt,
+            projectRoot: projectRoot,
+            instruction: `Antigravity Agent, tienes asignada la tarea ${story.id}: "${story.title}". Modifica ÚNICAMENTE los archivos en scopeFiles y verifica los criterios Dado-Cuando-Entonces.`
+          }
+          writeJsonFile(path.join(sddDir, 'active_task.json'), activeTask)
+
+          console.log(`\n🔔 [SDD_AGENT_TASK_ORDER]`)
+          console.log(`STORY: ${story.id} — "${story.title}"`)
+          console.log(`COMPONENTE: ${story.serviceId || 'core-app'}`)
+          console.log(`ASSIGNED_TO: ${assignedTo}`)
+          console.log(`SCOPE_FILES: ${(story.scopeFiles || []).join(', ')}`)
+          console.log(`CRITERIA: ${(story.acceptanceCriteria || []).length} escenarios Gherkin`)
+          console.log(`STATUS: IN_PROGRESS\n`)
+
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: true, story, activeTask }))
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: err.message }))
+        }
+      })
+      return
+    }
+
+    // 3.09 Deep Brownfield Reverse Engineering with AI POST /api/sdd/reverse-engineer
+    if (url.pathname === '/api/sdd/reverse-engineer' && req.method === 'POST') {
+      let bodyData = ''
+      req.on('data', chunk => { bodyData += chunk })
+      req.on('end', async () => {
+        try {
+          const { apiKey, model } = JSON.parse(bodyData || '{}')
+          const orConfig = getOpenRouterConfig(projectRoot)
+          const effectiveKey = apiKey || orConfig.apiKey
+          const effectiveModel = model || orConfig.defaultModel
+          const result = await reverseEngineerProjectWithAi({
+            projectRoot,
+            apiKey: effectiveKey,
+            model: effectiveModel
+          })
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: true, ...result }))
+        } catch (err) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: err.message }))
+        }
+      })
       return
     }
 

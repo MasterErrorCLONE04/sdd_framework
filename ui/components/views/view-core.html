@@ -1,0 +1,101 @@
+<!-- 0. PERSPECTIVA NÚCLEO & COMPUERTAS (SDD CORE) -->
+<main id="view-core" class="tab-content hidden max-w-6xl mx-auto space-y-6">
+  <!-- Project Profile Banner -->
+  <div class="bg-white border border-zinc-200 rounded-2xl p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-2">
+        <span id="core-purpose-pill" class="text-xs font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+          PROPÓSITO: COMERCIAL
+        </span>
+        <span id="core-depth-pill" class="text-xs font-black uppercase tracking-wider text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+          PROFUNDIDAD: SERIO
+        </span>
+        <span id="core-meta-pill" class="text-xs font-mono font-bold text-zinc-500">
+          Versión: 1.0.0
+        </span>
+      </div>
+      <h1 id="core-project-title" class="text-xl font-black text-zinc-950 mt-2">
+        FlashCheckout: Especificación SDD
+      </h1>
+      <p id="core-project-desc" class="text-xs text-zinc-600 mt-1 max-w-3xl leading-relaxed">
+        Plataforma gobernada por Especificaciones Ejecutables (Spec-Driven Development).
+      </p>
+    </div>
+
+    <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 flex items-center gap-3 shrink-0">
+      <div class="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+        <i data-lucide="shield-check" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="text-xs font-black text-emerald-950">Compuertas de Calidad SDD</div>
+        <div id="core-gates-stat" class="text-[11px] text-emerald-800 font-bold">5 de 5 Aprobadas</div>
+        <div class="text-[10px] text-emerald-700">Auto-Pilot Habilitado</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quality Gates Checklist Bar -->
+  <div class="bg-white border border-zinc-200 rounded-2xl p-5 shadow-xs space-y-3">
+    <div class="flex items-center justify-between">
+      <span class="text-xs font-black text-zinc-800 uppercase tracking-wider flex items-center gap-2">
+        <i data-lucide="unlock" class="w-4 h-4 text-emerald-600"></i>
+        Compuertas Obligatorias para Programar (Quality Gates):
+      </span>
+      <span class="text-[11px] font-mono text-emerald-600 font-bold">
+        Definidas en project.json
+      </span>
+    </div>
+
+    <div id="core-gates-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      <!-- Dynamic Gates injected here -->
+    </div>
+  </div>
+
+  <!-- Core Columns: Problema & Non-Goals -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Card 1: Problema / Necesidad -->
+    <div class="bg-white border border-zinc-200 rounded-2xl p-5 shadow-xs space-y-4">
+      <div class="flex items-center gap-2">
+        <i data-lucide="alert-circle" class="w-4 h-4 text-rose-600"></i>
+        <h3 class="text-sm font-black text-zinc-950 uppercase tracking-wider">
+          1. Problema & Dolores del Negocio
+        </h3>
+      </div>
+      <p id="core-problem-summary" class="text-xs text-zinc-600 leading-relaxed bg-zinc-50 p-3 rounded-xl border border-zinc-100">
+        Cargando problema...
+      </p>
+
+      <div id="core-pain-points-list" class="space-y-3">
+        <!-- Pain points injected -->
+      </div>
+    </div>
+
+    <!-- Card 2: Límites de Alcance & NON-GOALS EXPLÍCITOS -->
+    <div class="bg-white border border-zinc-200 rounded-2xl p-5 shadow-xs space-y-4">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i data-lucide="ban" class="w-4 h-4 text-amber-600"></i>
+          <h3 class="text-sm font-black text-zinc-950 uppercase tracking-wider">
+            2. Límites de Alcance & Non-Goals
+          </h3>
+        </div>
+        <span class="text-[10px] font-extrabold px-2 py-0.5 rounded bg-amber-100 text-amber-900">
+          Regla Anti-Dispersión
+        </span>
+      </div>
+      <p id="core-scope-philosophy" class="text-xs text-zinc-600 leading-relaxed bg-zinc-50 p-3 rounded-xl border border-zinc-100">
+        Garantizar foco absoluto en V1 congelando features complejas.
+      </p>
+
+      <div class="space-y-3">
+        <span class="text-xs font-black text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
+          <i data-lucide="ban" class="w-3.5 h-3.5 text-amber-600"></i>
+          Non-Goals Explícitos (Congelados para V2):
+        </span>
+        <div id="core-non-goals-list" class="space-y-2">
+          <!-- Non goals injected -->
+        </div>
+      </div>
+    </div>
+  </div>
+</main>

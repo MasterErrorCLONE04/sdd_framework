@@ -1,0 +1,89 @@
+<!-- EXECUTIVE TOPBAR: Metrics & Quick Controls -->
+<header class="h-14 shrink-0 flex items-center justify-between border-b border-zinc-200 bg-white px-5 z-30 gap-4 shadow-2xs">
+  <div class="flex items-center gap-3">
+    <!-- Logo & Title -->
+    <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-purple-800 text-white flex items-center justify-center shadow-md shadow-purple-600/20">
+      <i data-lucide="zap" class="w-4 h-4 fill-white"></i>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="header-proj-name" class="text-sm font-black tracking-tight text-zinc-950">Plataforma SDD</span>
+      <span id="header-depth-badge" class="px-2 py-0.5 rounded-full text-[9px] font-black bg-purple-50 text-purple-700 border border-purple-200 uppercase tracking-wider">
+        SDD SERIO
+      </span>
+      <span id="header-purpose-badge" class="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase tracking-wider">
+        COMERCIAL
+      </span>
+    </div>
+  </div>
+
+  <!-- Center Metrics -->
+  <div class="hidden lg:flex items-center gap-4 text-xs bg-zinc-50 border border-zinc-200/80 px-3.5 py-1.5 rounded-xl">
+    <div class="flex items-center gap-2">
+      <span class="font-bold text-zinc-500 text-[11px]">Salud Global:</span>
+      <span id="header-health-pct" class="font-black text-zinc-900">100%</span>
+      <div class="h-2 w-20 bg-zinc-200 rounded-full overflow-hidden">
+        <div id="header-health-bar" class="h-full bg-emerald-500 rounded-full transition-all duration-500" style="width: 100%;"></div>
+      </div>
+    </div>
+    <div class="h-3.5 w-px bg-zinc-300"></div>
+    <div class="text-[11px] text-zinc-600 flex items-center gap-3 font-medium">
+      <span>Arqui: <b id="stat-arqui" class="text-zinc-900 font-bold">100%</b></span>
+      <span>Flujos: <b id="stat-flows" class="text-zinc-900 font-bold">100%</b></span>
+      <span>UI: <b id="stat-ui" class="text-emerald-700 font-bold">100%</b></span>
+    </div>
+  </div>
+
+  <!-- Right Actions -->
+  <div class="flex items-center gap-2">
+    <div
+      onclick="switchTab('core')"
+      class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 cursor-pointer hover:bg-emerald-100 transition-colors shadow-2xs"
+      title="Compuertas de calidad aprobadas — Auto-Pilot Habilitado"
+    >
+      <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-600"></i>
+      <span id="header-gates-text">5/5 Compuertas ✓</span>
+    </div>
+
+    <button
+      onclick="switchTab('architecture')"
+      class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 text-xs font-bold text-zinc-700 transition-all shadow-2xs cursor-pointer"
+    >
+      <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+      <i data-lucide="server" class="w-3.5 h-3.5 text-zinc-500"></i>
+      <span class="hidden md:inline">DevOps</span>
+    </button>
+
+    <button
+      onclick="loadData()"
+      title="Sincronizar con disco"
+      class="p-2 rounded-xl border border-zinc-200 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 transition-colors shadow-2xs cursor-pointer"
+    >
+      <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+    </button>
+
+    <button
+      onclick="openReverseEngineerModal()"
+      title="Escanear e inferir arquitectura y especificaciones del código real con IA"
+      class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-xs font-bold text-indigo-900 transition-all shadow-2xs cursor-pointer"
+    >
+      <i data-lucide="scan-search" class="w-3.5 h-3.5 text-indigo-600"></i>
+      <span>⚡ Re-Ingeniería IA</span>
+    </button>
+
+    <button
+      onclick="switchScreen('chat')"
+      class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-xs font-bold text-purple-900 transition-all shadow-2xs cursor-pointer"
+    >
+      <i data-lucide="message-square" class="w-3.5 h-3.5 text-purple-600"></i>
+      <span>💬 Chat con Agente</span>
+    </button>
+
+    <button
+      onclick="openDispatchModal()"
+      class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-zinc-900 text-white hover:bg-zinc-800 transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
+    >
+      <i data-lucide="bot" class="w-3.5 h-3.5"></i>
+      <span>Despachar Agente</span>
+    </button>
+  </div>
+</header>

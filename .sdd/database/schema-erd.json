@@ -1,0 +1,12 @@
+{
+  "tables": [
+    {
+      "id": "tbl-unknown",
+      "table": "desconocida",
+      "description": "Motor y esquema no detectados en la evidencia; index.js indica operaciones de BD",
+      "columns": [
+        "(no detectadas)"
+      ]
+    }
+  ]
+}

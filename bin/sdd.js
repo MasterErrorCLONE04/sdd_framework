@@ -35,14 +35,17 @@ switch (command) {
     break
   }
 
+  case 'discover-flows':
   case 'scan': {
+    const isAi = args.includes('--ai') || command === 'discover-flows'
     console.log(`🔍 Analizando repositorio en: ${projectRoot}...`)
     const findings = scanProject(projectRoot)
-    console.log(`\n📊 Diagnóstico Heurístico:`)
+    console.log(`\n📊 Mapa Base del Repositorio:`)
     console.log(` - Lenguaje principal: ${findings.language}`)
     console.log(` - Framework: ${findings.framework}`)
     console.log(` - Base de datos: ${findings.database}`)
     console.log(` - Rutas detectadas: ${findings.detectedRoutes.length}`)
+    console.log(` - Vistas detectadas: ${findings.detectedScreens?.length || 0}`)
     console.log(` - Servicios: ${findings.services.join(', ') || 'N/A'}`)
     
     // Save or update architecture.json
@@ -53,7 +56,21 @@ switch (command) {
         origin: 'inferred',
         lastScan: new Date().toISOString()
       }, null, 2), 'utf-8')
-      console.log(`✅ Arquitectura actualizada en .sdd/architecture.json con origen [INFERIDO].`)
+      console.log(`✅ Arquitectura actualizada en .sdd/architecture.json`)
+    }
+
+    if (isAi) {
+      console.log(`\n🤖 Iniciando Descubrimiento de Flujos con IA (Ingeniería Inversa Semántica)...`)
+      try {
+        const { discoverFlowsWithAi } = await import('../src/flows-ai.js')
+        const result = await discoverFlowsWithAi({ projectRoot })
+        console.log(`✅ ${result.summary}`)
+        console.log(`✨ ${result.flowsCount} flujos guardados en .sdd/flows/ con diagramas UML en .sdd/sequences/`)
+      } catch (err) {
+        console.error(`❌ Error en descubrimiento con IA: ${err.message}`)
+      }
+    } else {
+      console.log(`\n💡 Tip: Ejecuta 'sdd scan --ai' o 'sdd discover-flows' para que la IA deduzca todos los flujos de negocio reales.`)
     }
     break
   }
@@ -119,7 +136,8 @@ switch (command) {
     console.log(`\nComandos disponibles:`)
     console.log(`  sdd studio [--port 3030]  Inicia el servidor local y abre SDD Studio en el navegador`)
     console.log(`  sdd init [--scan]         Inicializa la estructura .sdd/ y AGENTS.md`)
-    console.log(`  sdd scan                  Analiza heurísticamente el código y arquitectura del proyecto`)
+    console.log(`  sdd scan [--ai]           Mapea la arquitectura del código fuente (opcionalmente con IA)`)
+    console.log(`  sdd discover-flows        Descubre todos los flujos de negocio reales usando IA`)
     console.log(`  sdd drift                 Audita la deriva de Git contra los scopeFiles declarados`)
     console.log(`  sdd mcp                   Inicia el servidor MCP para Antigravity, Cursor y Claude Code`)
     console.log(`  sdd --version             Muestra la versión de SDD CLI`)
