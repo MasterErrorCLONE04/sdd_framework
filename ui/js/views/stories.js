@@ -61,6 +61,13 @@ export function renderStories() {
           <span class="px-2.5 py-1 rounded-xl text-xs font-mono font-black bg-blue-50 text-blue-700 border border-blue-200/80 shadow-2xs">
             ${escapeHtml(s.id)}
           </span>
+          <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${
+            s.type === 'bug'
+              ? 'bg-rose-100 text-rose-800 border border-rose-200'
+              : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+          }">
+            ${s.type === 'bug' ? '🐛 BUG / FIX' : '✨ FEATURE'}
+          </span>
           <h3 class="text-sm md:text-base font-bold text-zinc-950 tracking-tight">
             ${escapeHtml(s.title)}
           </h3>
@@ -109,6 +116,26 @@ export function renderStories() {
           <span class="text-zinc-800">${escapeHtml(s.benefit || s.soThat || '')}</span>.
         </div>
       </div>
+
+      ${s.type === 'bug' ? `
+        <!-- Spec Kit Bug Diagnostic & Root Cause Box -->
+        <div class="rounded-xl bg-rose-50/50 border border-rose-200 p-4 space-y-2">
+          <div class="text-[10px] font-mono font-black uppercase tracking-wider text-rose-800 flex items-center gap-1.5">
+            <i data-lucide="bug" class="w-3.5 h-3.5 text-rose-600"></i>
+            <span>Diagnóstico & Causa Raíz (Bug Fix Workflow)</span>
+          </div>
+          ${s.reproductionSteps ? `
+            <div class="text-xs text-zinc-700">
+              <b class="text-rose-950">Pasos de Reproducción:</b> ${escapeHtml(s.reproductionSteps)}
+            </div>
+          ` : ''}
+          ${s.rootCause ? `
+            <div class="text-xs text-zinc-700">
+              <b class="text-rose-950">Causa Raíz Identificada:</b> ${escapeHtml(s.rootCause)}
+            </div>
+          ` : ''}
+        </div>
+      ` : ''}
 
       <!-- Acceptance Criteria (Gherkin Scenarios) -->
       <div class="space-y-2.5">

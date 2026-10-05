@@ -105,3 +105,32 @@ export async function reverseEngineerProject(config = {}) {
   }
   return res.json();
 }
+
+export async function syncMultiIdeRules() {
+  const res = await fetch('/api/sdd/sync-rules', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Error al sincronizar reglas Multi-IDE');
+  }
+  return res.json();
+}
+
+export async function auditConvergence() {
+  const res = await fetch('/api/sdd/converge', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Error al auditar convergencia');
+  }
+  return res.json();
+}
+
+export async function togglePrinciple(togglePrincipleId) {
+  return patchSdd({ togglePrincipleId });
+}
+

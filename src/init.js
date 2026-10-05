@@ -79,6 +79,59 @@ export function initializeSdd(projectRoot = process.cwd(), options = {}) {
     fs.writeFileSync(boundariesPath, JSON.stringify(initialBoundaries, null, 2), 'utf-8')
   }
 
+  // 3.5 core/constitution.json (Invariantes de Ingeniería)
+  const constitutionPath = path.join(sddDir, 'core', 'constitution.json')
+  if (!fs.existsSync(constitutionPath)) {
+    const initialConstitution = {
+      title: 'Constitución de Ingeniería & Invariantes Técnicos',
+      version: '1.0.0',
+      lastUpdated: new Date().toISOString(),
+      principles: [
+        {
+          id: 'const-1',
+          category: 'Code Quality',
+          name: 'Tipado Estricto & Cero Dependencias Invasivas',
+          rule: 'El código debe ser modular, tipado y evitar librerías invasivas sin justificación explícita.',
+          severity: 'mandatory',
+          status: 'active'
+        },
+        {
+          id: 'const-2',
+          category: 'Testing & Convergence',
+          name: 'Criterios Gherkin Ejecutables',
+          rule: 'Toda funcionalidad debe acompañarse de verificación de criterios Dado-Cuando-Entonces antes del cierre.',
+          severity: 'mandatory',
+          status: 'active'
+        },
+        {
+          id: 'const-3',
+          category: 'Scope Isolation',
+          name: 'Escudo de Deriva (Scope Shield)',
+          rule: 'Los agentes de IA tienen estrictamente prohibido modificar archivos fuera de los declarados en scopeFiles.',
+          severity: 'mandatory',
+          status: 'active'
+        },
+        {
+          id: 'const-4',
+          category: 'Architecture',
+          name: 'Separación Limpia de Capas',
+          rule: 'La lógica de negocio debe residir en servicios desacoplados de la presentación visual y del transporte HTTP.',
+          severity: 'mandatory',
+          status: 'active'
+        },
+        {
+          id: 'const-5',
+          category: 'Security & Resilience',
+          name: 'Manejo Defensivo de Datos & Secretos',
+          rule: 'Nunca quemar claves API o credenciales en código ni en artefactos expuestos al cliente.',
+          severity: 'mandatory',
+          status: 'active'
+        }
+      ]
+    }
+    fs.writeFileSync(constitutionPath, JSON.stringify(initialConstitution, null, 2), 'utf-8')
+  }
+
   // 4. architecture.json
   const archPath = path.join(sddDir, 'architecture.json')
   if (!fs.existsSync(archPath)) {
@@ -113,9 +166,10 @@ export function initializeSdd(projectRoot = process.cwd(), options = {}) {
 El desarrollo, las especificaciones y las tareas de este proyecto se gestionan formalmente en \`.sdd/\`.
 Cualquier agente de IA (Antigravity, Cursor, Windsurf, Claude Code, etc.) DEBE acatar estrictamente las siguientes reglas:
 
-0. **Compuertas de Calidad & Non-Goals:**
-   - Consulta \`.sdd/project.json\` para entender el propósito y la profundidad requerida.
+0. **Constitución e Invariantes del Proyecto:**
+   - Lee \`.sdd/core/constitution.json\`: Cumple rigurosamente con los invariantes de calidad, tipado y arquitectura.
    - Lee \`.sdd/core/scope-boundaries.json\`: NUNCA programes features listadas en \`explicitNonGoals\`.
+   - Consulta \`.sdd/project.json\` para entender el propósito y compuertas de calidad.
 
 1. **Lectura Previa Obligatoria:**
    - Antes de escribir código, consulta la Historia en \`.sdd/requirements/stories/<US-ID>.json\` o el nodo en \`.sdd/flows/<flujo>.json\`.
@@ -131,6 +185,9 @@ Cualquier agente de IA (Antigravity, Cursor, Windsurf, Claude Code, etc.) DEBE a
 4. **Actualización Atómica del Estado (1 Archivo por Entidad):**
    - Trabaja sobre el archivo individual de la entidad para evitar conflictos de merge.
    - Cuando todas las tareas estén completadas, actualiza \`"status": "done"\` y firma en \`"assignedTo": "NombreAgente"\`.
+
+5. **Bucle de Convergencia (Spec Convergence):**
+   - Verifica que el código satisfaga el 100% de la especificación sin introducir regresiones ni archivos fuera de scope.
 `
     fs.writeFileSync(agentsMdPath, agentsRuleContent, 'utf-8')
   }

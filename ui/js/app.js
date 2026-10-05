@@ -1,7 +1,7 @@
 // SDD Studio — Application Master Bootstrap & Controller
 
 import { state, ensureDefaultSession } from './state.js';
-import { fetchSddData, fetchOpenRouterConfig } from './api.js';
+import { fetchSddData, fetchOpenRouterConfig, syncMultiIdeRules } from './api.js';
 import { escapeHtml, formatMarkdown, showToast, copyTextToClipboard } from './utils.js';
 import { switchScreen, switchTab, toggleChatSidebar, toggleModelDropdown, selectEngine } from './navigation.js';
 import {
@@ -35,7 +35,7 @@ import {
   switchPreviewTab,
   sendQuickAction
 } from './chat.js';
-import { renderHeader, renderCore, toggleGate } from './views/core.js';
+import { renderHeader, renderCore, toggleGate, toggleConstitutionPrinciple } from './views/core.js';
 import {
   setDiscoveryFilter,
   insertDiscoveryPreset,
@@ -75,10 +75,22 @@ import {
 import { renderDatabase } from './views/database.js';
 import { renderRolesAndRisks } from './views/roles.js';
 import { renderQA } from './views/qa.js';
-import { renderDrift } from './views/drift.js';
+import { renderDrift, runConvergenceAudit } from './views/drift.js';
 import { setUiuxFilter, filterUiuxScreens, rescanUiuxViews, renderUIUX } from './views/uiux.js';
 import { renderKanban, updateStoryStatus } from './views/kanban.js';
 import { loadComponents } from './componentLoader.js';
+
+export async function handleSyncMultiIde() {
+  try {
+    showToast('Sincronizando reglas para Cursor, Claude, Windsurf y Copilot...');
+    const res = await syncMultiIdeRules();
+    if (res.success) {
+      showToast(`Reglas sincronizadas (${(res.filesWritten || []).join(', ')})`);
+    }
+  } catch (err) {
+    showToast('Error al sincronizar reglas: ' + err.message, 'alert-circle');
+  }
+}
 
 // Expose all public methods to window for inline HTML event handlers
 window.switchScreen = switchScreen;
@@ -156,6 +168,9 @@ window.rescanUiuxViews = rescanUiuxViews;
 window.renderUIUX = renderUIUX;
 window.renderKanban = renderKanban;
 window.updateStoryStatus = updateStoryStatus;
+window.toggleConstitutionPrinciple = toggleConstitutionPrinciple;
+window.runConvergenceAudit = runConvergenceAudit;
+window.handleSyncMultiIde = handleSyncMultiIde;
 window.showToast = showToast;
 window.escapeHtml = escapeHtml;
 window.loadData = loadData;

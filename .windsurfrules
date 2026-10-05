@@ -1,0 +1,22 @@
+# Spec-Driven Development (SDD) — Reglas y Contexto del Proyecto: sdd
+
+Este proyecto utiliza **Spec-Driven Development (SDD)**. La fuente de verdad única y ejecutable reside en el directorio `.sdd/`.
+
+## 📜 Constitución del Proyecto & Invariantes Técnicos
+- [Code Quality] Tipado Estricto & Cero Dependencias Invasivas: El código debe ser modular, tipado y evitar librerías invasivas sin justificación explícita.
+- [Testing & Convergence] Criterios Gherkin Ejecutables: Toda funcionalidad debe acompañarse de verificación de criterios Dado-Cuando-Entonces antes del cierre.
+- [Scope Isolation] Escudo de Deriva (Scope Shield): Los agentes de IA tienen estrictamente prohibido modificar archivos fuera de los declarados en scopeFiles.
+- [Architecture] Separación Limpia de Capas: La lógica de negocio debe residir en servicios desacoplados de la presentación visual y del transporte HTTP.
+- [Security & Resilience] Manejo Defensivo de Datos & Secretos: Nunca quemar claves API o credenciales en código ni en artefactos expuestos al cliente.
+
+## 🚫 Non-Goals Explícitos (Congelados para V1 - NO IMPLEMENTAR)
+- Funcionalidades fuera de alcance congeladas para V2.
+
+## 🤖 Directivas de Ejecución para Agentes de IA:
+1. **Lectura Previa**: Consulta la historia o tarea activa en `.sdd/active_task.json` o `.sdd/requirements/stories/US-*.json` antes de escribir código.
+2. **Escudo de Deriva (Scope Shield)**: Modifica ÚNICAMENTE los archivos declarados en `scopeFiles`. Cualquier cambio fuera de scope es rechazado por el sistema.
+3. **Criterios Gherkin**: Verifica cada escenario Dado-Cuando-Entonces y marca `"done": true` en el archivo atómico JSON de la historia.
+4. **Bucle de Convergencia**: Asegura que el 100% de la especificación esté satisfecha sin romper invariantes ni introducir código muerto.
+
+## Directivas para Windsurf Cascade:
+- Respeta estrictamente los límites de alcance declarados en scopeFiles.

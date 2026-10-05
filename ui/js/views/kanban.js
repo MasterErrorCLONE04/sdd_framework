@@ -23,7 +23,10 @@ export function renderKanban() {
     card.className = 'bg-white border border-zinc-200 rounded-xl p-3 shadow-xs space-y-2';
     card.innerHTML = `
       <div class="flex items-center justify-between">
-        <span class="text-[10px] font-mono font-black text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded">${s.id}</span>
+        <div class="flex items-center gap-1.5">
+          <span class="text-[10px] font-mono font-black text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded">${s.id}</span>
+          ${s.type === 'bug' ? '<span class="text-[9px] font-black bg-rose-100 text-rose-800 px-1 rounded">🐛 BUG</span>' : ''}
+        </div>
         <span class="text-[9px] font-mono font-bold bg-zinc-100 text-zinc-600 px-1 rounded">${s.points || 3} pts</span>
       </div>
       <div class="text-xs font-bold text-zinc-900">${s.title}</div>

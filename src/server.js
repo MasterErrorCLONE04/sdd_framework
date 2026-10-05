@@ -202,6 +202,129 @@ function getDriftReport(projectRoot) {
   }
 }
 
+function calculateConvergence(projectRoot, sddDir) {
+  const reqDir = path.join(sddDir, 'requirements')
+  const storiesDir = path.join(reqDir, 'stories')
+  const coreDir = path.join(sddDir, 'core')
+  const drift = getDriftReport(projectRoot)
+
+  let stories = []
+  if (fs.existsSync(storiesDir)) {
+    const files = fs.readdirSync(storiesDir).filter(f => f.endsWith('.json'))
+    stories = files.map(f => readJsonFile(path.join(storiesDir, f))).filter(Boolean)
+  }
+  if (stories.length === 0) {
+    stories = readJsonFile(path.join(reqDir, 'user-stories.json'), [])
+  }
+
+  let totalCriteria = 0
+  let doneCriteria = 0
+  const pendingDetails = []
+
+  stories.forEach(s => {
+    const criteria = s.acceptanceCriteria || []
+    const pendingList = []
+    criteria.forEach(c => {
+      totalCriteria++
+      if (c.done) doneCriteria++
+      else pendingList.push(c.scenario || c.id)
+    })
+    if (pendingList.length > 0) {
+      pendingDetails.push({ storyId: s.id, title: s.title, pending: pendingList })
+    }
+  })
+
+  const criteriaPercent = totalCriteria > 0 ? Math.round((doneCriteria / totalCriteria) * 100) : 100
+  const constitution = readJsonFile(path.join(coreDir, 'constitution.json'), { principles: [] })
+  const activePrinciples = (constitution.principles || []).filter(p => p.status === 'active')
+
+  let status = 'converged'
+  let label = 'CONVERGIDO'
+  let message = 'La implementación satisface el 100% de la especificación sin violaciones de alcance.'
+
+  if (drift.outOfScope && drift.outOfScope.length > 0) {
+    status = 'divergent'
+    label = 'DIVERGENCIA DETECTADA'
+    message = `Se detectaron ${drift.outOfScope.length} archivos modificados fuera de alcance (Scope Shield comprometido).`
+  } else if (criteriaPercent < 100 || pendingDetails.length > 0) {
+    status = 'in_progress'
+    label = 'EN CONVERGENCIA'
+    message = `Faltan ${totalCriteria - doneCriteria} criterios Gherkin por verificar en ${pendingDetails.length} historias.`
+  }
+
+  return {
+    status,
+    label,
+    message,
+    score: Math.round((criteriaPercent * 0.7) + ((drift.driftScore || 100) * 0.3)),
+    criteriaPercent,
+    totalCriteria,
+    doneCriteria,
+    pendingCount: totalCriteria - doneCriteria,
+    pendingDetails,
+    drift,
+    activePrinciplesCount: activePrinciples.length,
+    timestamp: new Date().toISOString()
+  }
+}
+
+function generateMultiIdeRules(projectRoot, sddDir) {
+  const project = readJsonFile(path.join(sddDir, 'project.json'), { name: path.basename(projectRoot) })
+  const constitution = readJsonFile(path.join(sddDir, 'core', 'constitution.json'), { principles: [] })
+  const scopeBoundaries = readJsonFile(path.join(sddDir, 'core', 'scope-boundaries.json'), { inScopeV1: [], explicitNonGoals: [] })
+  
+  const nonGoalsList = (scopeBoundaries.explicitNonGoals || []).map(ng => `- ${typeof ng === 'object' ? ng.feature || JSON.stringify(ng) : ng}`).join('\n')
+  const principlesList = (constitution.principles || []).map(p => `- [${p.category || 'General'}] ${p.name || ''}: ${p.rule || ''}`).join('\n')
+
+  const baseContent = `# Spec-Driven Development (SDD) — Reglas y Contexto del Proyecto: ${project.name || 'Proyecto'}
+
+Este proyecto utiliza **Spec-Driven Development (SDD)**. La fuente de verdad única y ejecutable reside en el directorio \`.sdd/\`.
+
+## 📜 Constitución del Proyecto & Invariantes Técnicos
+${principlesList || '- Modularidad, tipado estricto y cero dependencias invasivas.'}
+
+## 🚫 Non-Goals Explícitos (Congelados para V1 - NO IMPLEMENTAR)
+${nonGoalsList || '- Funcionalidades fuera de alcance congeladas para V2.'}
+
+## 🤖 Directivas de Ejecución para Agentes de IA:
+1. **Lectura Previa**: Consulta la historia o tarea activa en \`.sdd/active_task.json\` o \`.sdd/requirements/stories/US-*.json\` antes de escribir código.
+2. **Escudo de Deriva (Scope Shield)**: Modifica ÚNICAMENTE los archivos declarados en \`scopeFiles\`. Cualquier cambio fuera de scope es rechazado por el sistema.
+3. **Criterios Gherkin**: Verifica cada escenario Dado-Cuando-Entonces y marca \`"done": true\` en el archivo atómico JSON de la historia.
+4. **Bucle de Convergencia**: Asegura que el 100% de la especificación esté satisfecha sin romper invariantes ni introducir código muerto.
+`
+
+  const filesWritten = []
+
+  // 1. AGENTS.md
+  const agentsPath = path.join(projectRoot, 'AGENTS.md')
+  fs.writeFileSync(agentsPath, baseContent, 'utf-8')
+  filesWritten.push('AGENTS.md')
+
+  // 2. .cursorrules
+  const cursorPath = path.join(projectRoot, '.cursorrules')
+  fs.writeFileSync(cursorPath, baseContent + `\n## Directivas para Cursor:\n- Mantén ediciones concisas y dentro del archivo activo.\n- Consulta .sdd/architecture.json para el mapa de contenedores.\n`, 'utf-8')
+  filesWritten.push('.cursorrules')
+
+  // 3. CLAUDE.md
+  const claudePath = path.join(projectRoot, 'CLAUDE.md')
+  fs.writeFileSync(claudePath, baseContent + `\n## Directivas para Claude Code:\n- Revisa la estructura .sdd/ antes de planear herramientas de edición.\n- Ejecuta validaciones de test antes de reportar finalización.\n`, 'utf-8')
+  filesWritten.push('CLAUDE.md')
+
+  // 4. .windsurfrules
+  const windsurfPath = path.join(projectRoot, '.windsurfrules')
+  fs.writeFileSync(windsurfPath, baseContent + `\n## Directivas para Windsurf Cascade:\n- Respeta estrictamente los límites de alcance declarados en scopeFiles.\n`, 'utf-8')
+  filesWritten.push('.windsurfrules')
+
+  // 5. .github/copilot-instructions.md
+  const githubDir = path.join(projectRoot, '.github')
+  if (!fs.existsSync(githubDir)) fs.mkdirSync(githubDir, { recursive: true })
+  const copilotPath = path.join(githubDir, 'copilot-instructions.md')
+  fs.writeFileSync(copilotPath, baseContent + `\n## Directivas para GitHub Copilot:\n- Basa sugerencias en la especificación SDD y no en suposiciones no verificadas.\n`, 'utf-8')
+  filesWritten.push('.github/copilot-instructions.md')
+
+  return filesWritten
+}
+
 export function createSddServer(projectRoot = process.cwd(), port = 3030) {
   const sddDir = path.join(projectRoot, '.sdd')
   const coreDir = path.join(sddDir, 'core')
@@ -243,6 +366,11 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
         const scopeBoundaries = readJsonFile(path.join(coreDir, 'scope-boundaries.json'), { inScopeV1: [], explicitNonGoals: [] })
         const successCriteria = readJsonFile(path.join(coreDir, 'success-criteria.json'), {})
         const risks = readJsonFile(path.join(coreDir, 'risks.json'), {})
+        const constitution = readJsonFile(path.join(coreDir, 'constitution.json'), {
+          title: 'Constitución de Ingeniería & Invariantes Técnicos',
+          version: '1.0.0',
+          principles: []
+        })
 
         const interviews = readJsonFile(path.join(discoveryDir, 'interviews.json'), { interviewSessions: [] })
         const hypotheses = readJsonFile(path.join(discoveryDir, 'hypotheses.json'), {})
@@ -377,7 +505,7 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
           project,
           genesisTask,
           activeTask,
-          core: { problem, targetUsers, scopeBoundaries, successCriteria, risks },
+          core: { problem, targetUsers, scopeBoundaries, successCriteria, risks, constitution },
           discovery: { interviews, hypotheses, competitors },
           manifest: {
             metrics: { globalHealth: 100, flowsHealth: 100, totalFlows: flows.length },
@@ -391,7 +519,8 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
           sequences,
           stateMachines,
           uiUx: { screens },
-          drift
+          drift,
+          convergence: calculateConvergence(projectRoot, sddDir)
         }
 
         res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -481,6 +610,28 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
                 res.end(JSON.stringify({ success: true, qualityGates: project.qualityGates }))
                 return
               }
+            }
+          }
+
+          // 2.25 Mutar o Actualizar Constitución de Ingeniería
+          if (body.constitution) {
+            const constFile = path.join(coreDir, 'constitution.json')
+            writeJsonFile(constFile, body.constitution)
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, constitution: body.constitution }))
+            return
+          }
+
+          if (body.togglePrincipleId) {
+            const constFile = path.join(coreDir, 'constitution.json')
+            const constData = readJsonFile(constFile, { principles: [] })
+            const p = constData.principles?.find(x => x.id === body.togglePrincipleId)
+            if (p) {
+              p.status = p.status === 'active' ? 'disabled' : 'active'
+              writeJsonFile(constFile, constData)
+              res.writeHead(200, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ success: true, updatedPrinciple: p }))
+              return
             }
           }
 
@@ -722,6 +873,9 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
           const {
             serviceId = 'core-app',
             title,
+            type = 'feature',
+            reproductionSteps = '',
+            rootCause = '',
             role = 'usuario',
             action = 'ejecutar la funcionalidad correspondiente',
             benefit = 'cumplir con el objetivo del negocio',
@@ -764,16 +918,19 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
             : [
                 {
                   id: 'c-1',
-                  scenario: 'Comportamiento esperado',
-                  given: 'el usuario en el sistema',
-                  when: `ejecuta la tarea "${title.trim()}"`,
-                  then: 'el sistema responde de forma exitosa y sin regresiones',
+                  scenario: type === 'bug' ? 'Reproducción y verificación del fix' : 'Comportamiento esperado',
+                  given: type === 'bug' ? 'el entorno con la condición que disparaba el bug' : 'el usuario en el sistema',
+                  when: type === 'bug' ? `se ejecuta el fix para "${title.trim()}"` : `ejecuta la tarea "${title.trim()}"`,
+                  then: type === 'bug' ? 'el error ya no ocurre y no se introducen regresiones' : 'el sistema responde de forma exitosa y sin regresiones',
                   done: false
                 }
               ]
 
           const newStory = {
             id: storyId,
+            type: type || 'feature', // 'feature' | 'bug'
+            reproductionSteps: reproductionSteps || '',
+            rootCause: rootCause || '',
             epicId: epicId || 'EPIC-01',
             serviceId: serviceId || 'core-app',
             title: title.trim(),
@@ -911,6 +1068,36 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
           res.end(JSON.stringify({ error: err.message }))
         }
       })
+      return
+    }
+
+    // 3.095 Sync Multi-IDE Rules POST /api/sdd/sync-rules
+    if (url.pathname === '/api/sdd/sync-rules' && req.method === 'POST') {
+      try {
+        const filesWritten = generateMultiIdeRules(projectRoot, sddDir)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({
+          success: true,
+          message: 'Reglas Multi-IDE sincronizadas exitosamente.',
+          filesWritten
+        }))
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: err.message }))
+      }
+      return
+    }
+
+    // 3.096 Audit Convergence POST /api/sdd/converge
+    if (url.pathname === '/api/sdd/converge' && req.method === 'POST') {
+      try {
+        const convergence = calculateConvergence(projectRoot, sddDir)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ success: true, convergence }))
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: err.message }))
+      }
       return
     }
 

@@ -98,4 +98,45 @@
       </div>
     </div>
   </div>
+
+  <!-- Card 3: Constitución del Proyecto & Invariantes Técnicos (Spec Kit Style) -->
+  <div class="bg-white border border-zinc-200 rounded-2xl p-6 shadow-xs space-y-4">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-100">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-black">
+          <i data-lucide="scroll" class="w-4 h-4"></i>
+        </div>
+        <div>
+          <h3 class="text-sm font-black text-zinc-950 uppercase tracking-wider flex items-center gap-2">
+            3. Constitución de Ingeniería & Invariantes Técnicos
+            <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 font-bold border border-purple-200">
+              Reglas Inmutables
+            </span>
+          </h3>
+          <p class="text-xs text-zinc-500 font-normal">
+            Principios arquitectónicos que rigen de forma vinculante para todo agente de IA antes de implementar o converger código.
+          </p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <span id="constitution-active-count" class="text-xs font-mono font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200">
+          5 Invariantes Activos
+        </span>
+        <button
+          onclick="handleSyncMultiIde()"
+          title="Exportar constitución y reglas a .cursorrules, CLAUDE.md y copilot-instructions.md"
+          class="px-3 py-1.5 rounded-xl border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-xs font-bold text-zinc-700 transition-colors flex items-center gap-1.5 cursor-pointer"
+        >
+          <i data-lucide="share-2" class="w-3.5 h-3.5 text-zinc-600"></i>
+          <span>Sincronizar a IDEs</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Principles Grid Container -->
+    <div id="core-constitution-list" class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+      <!-- Injected dynamically via core.js -->
+    </div>
+  </div>
 </main>

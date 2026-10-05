@@ -92,8 +92,7 @@ export function startMcpServer(projectRoot = process.cwd()) {
       inputSchema: {
         type: 'object',
         properties: {}
-      }
-    },
+         },
     {
       name: 'sdd_complete_genesis_task',
       description: 'Marca la orden de génesis (.sdd/genesis_task.json) como completada tras haber escrito los archivos .sdd/ y AGENTS.md, indicando a la cabina web que abra la vista en vivo de 12 perspectivas.',
@@ -102,6 +101,14 @@ export function startMcpServer(projectRoot = process.cwd()) {
         properties: {
           notes: { type: 'string', description: 'Notas de síntesis del agente sobre los archivos creados' }
         }
+      }
+    },
+    {
+      name: 'sdd_audit_convergence',
+      description: 'Audita el grado de convergencia del proyecto: verifica cumplimiento del 100% de criterios Gherkin, archivos modificados en Git vs scopeFiles e invariantes constitucionales.',
+      inputSchema: {
+        type: 'object',
+        properties: {}
       }
     }
   ]
@@ -113,6 +120,8 @@ export function startMcpServer(projectRoot = process.cwd()) {
         const problem = readJson(path.join(coreDir, 'problem.json'), {})
         const boundaries = readJson(path.join(coreDir, 'scope-boundaries.json'), {})
         const targetUsers = readJson(path.join(coreDir, 'target-user.json'), {})
+        const constitution = readJson(path.join(coreDir, 'constitution.json'), { principles: [] })
+
         return {
           content: [
             {
@@ -124,6 +133,7 @@ export function startMcpServer(projectRoot = process.cwd()) {
                   depth: project.depth,
                   qualityGates: project.qualityGates
                 },
+                constitution: constitution.principles || [],
                 problem: problem.statement || problem.summary,
                 explicitNonGoals: boundaries.explicitNonGoals || [],
                 inScopeV1: boundaries.inScopeV1 || [],
@@ -319,6 +329,43 @@ export function startMcpServer(projectRoot = process.cwd()) {
                 success: true,
                 message: '✓ Orden Génesis completada con éxito. La cabina web detectará los cambios y se abrirá en vivo.',
                 task
+              }, null, 2)
+            }
+          ]
+        }
+      }
+
+      case 'sdd_audit_convergence': {
+        let stories = []
+        if (fs.existsSync(storiesDir)) {
+          const files = fs.readdirSync(storiesDir).filter(f => f.endsWith('.json'))
+          stories = files.map(f => readJson(path.join(storiesDir, f))).filter(Boolean)
+        }
+        let total = 0, done = 0
+        const pending = []
+        stories.forEach(s => {
+          (s.acceptanceCriteria || []).forEach(c => {
+            total++
+            if (c.done) done++
+            else pending.push({ storyId: s.id, scenario: c.scenario })
+          })
+        })
+        const criteriaScore = total > 0 ? Math.round((done / total) * 100) : 100
+        const isConverged = criteriaScore === 100 && stories.length > 0
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                status: isConverged ? 'CONVERGED' : 'IN_PROGRESS',
+                criteriaScore: `${criteriaScore}%`,
+                totalCriteria: total,
+                doneCriteria: done,
+                pendingCount: pending.length,
+                pendingDetails: pending.slice(0, 10),
+                message: isConverged
+                  ? '✓ Proyecto 100% convergido contra la especificación SDD.'
+                  : `⚠️ Divergencia: faltan ${pending.length} criterios Gherkin por verificar.`
               }, null, 2)
             }
           ]

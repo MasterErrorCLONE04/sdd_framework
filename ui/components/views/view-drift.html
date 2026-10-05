@@ -1,11 +1,83 @@
-<!-- 9. PERSPECTIVA DERIVA (DRIFT) -->
+<!-- 9. PERSPECTIVA CONVERGENCIA & DERIVA (SPEC CONVERGENCE & SCOPE SHIELD) -->
 <main id="view-drift" class="tab-content hidden max-w-6xl mx-auto space-y-6">
+  <!-- Bucle de Convergencia de Especificación (Spec Kit Style) -->
+  <div class="bg-white border border-zinc-200 rounded-2xl p-6 shadow-xs space-y-5">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-100">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-black">
+          <i data-lucide="check-check" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h2 class="text-lg font-black text-zinc-950 flex items-center gap-2">
+            Bucle de Convergencia de Especificación (Spec Convergence)
+            <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 font-bold border border-purple-200">
+              Audit Engine
+            </span>
+          </h2>
+          <p class="text-xs text-zinc-500 font-normal">
+            Verifica que la implementación en código satisfaga el 100% de los criterios Gherkin sin regresiones ni violaciones de alcance.
+          </p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button
+          onclick="runConvergenceAudit()"
+          class="px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
+        >
+          <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+          <span>Re-Auditar Convergencia</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Live Verdict Card -->
+    <div id="convergence-verdict-card" class="p-5 rounded-2xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 bg-emerald-50/50 border-emerald-200">
+      <div class="space-y-1">
+        <div class="flex items-center gap-2">
+          <span id="convergence-status-pill" class="text-xs font-black uppercase px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+            CONVERGIDO
+          </span>
+          <span id="convergence-score-text" class="text-sm font-black text-zinc-900">Score: 100%</span>
+        </div>
+        <p id="convergence-message-text" class="text-xs text-zinc-600 font-medium leading-relaxed">
+          La implementación satisface el 100% de la especificación sin violaciones de alcance.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-3 gap-2.5 text-center shrink-0">
+        <div class="p-2.5 rounded-xl bg-white border border-zinc-200/80 min-w-[70px]">
+          <div id="conv-stat-criteria" class="text-sm font-black text-zinc-900">100%</div>
+          <div class="text-[9px] font-mono text-zinc-500 uppercase font-bold">Gherkin</div>
+        </div>
+        <div class="p-2.5 rounded-xl bg-white border border-zinc-200/80 min-w-[70px]">
+          <div id="conv-stat-drift" class="text-sm font-black text-emerald-700">100%</div>
+          <div class="text-[9px] font-mono text-zinc-500 uppercase font-bold">Scope Shield</div>
+        </div>
+        <div class="p-2.5 rounded-xl bg-white border border-zinc-200/80 min-w-[70px]">
+          <div id="conv-stat-pending" class="text-sm font-black text-zinc-900">0</div>
+          <div class="text-[9px] font-mono text-zinc-500 uppercase font-bold">Pendientes</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pending Criteria Breakdown (If any) -->
+    <div id="convergence-pending-section" class="space-y-2 hidden">
+      <div class="text-xs font-black text-zinc-800 uppercase tracking-wider flex items-center gap-1.5">
+        <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600"></i>
+        <span>Criterios de Aceptación Pendientes por Cumplir:</span>
+      </div>
+      <div id="convergence-pending-list" class="space-y-2"></div>
+    </div>
+  </div>
+
+  <!-- Git Scope Shield Card -->
   <div class="bg-white border border-zinc-200 rounded-2xl p-6 shadow-xs space-y-4">
     <div class="flex items-center justify-between">
-      <h2 class="text-lg font-black text-zinc-950 flex items-center gap-2">
-        <i data-lucide="git-compare" class="w-5 h-5 text-red-600"></i>
-        Auditoría de Deriva de Código (Scope Shield)
-      </h2>
+      <h3 class="text-sm font-black text-zinc-950 uppercase tracking-wider flex items-center gap-2">
+        <i data-lucide="git-compare" class="w-4 h-4 text-red-600"></i>
+        Auditoría de Deriva de Código Git (Scope Shield)
+      </h3>
       <span id="drift-score-badge" class="px-2.5 py-1 rounded-full text-xs font-mono font-black bg-emerald-100 text-emerald-800">
         Score: 100% Clean
       </span>
@@ -23,3 +95,4 @@
     </div>
   </div>
 </main>
+

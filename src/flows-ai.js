@@ -6,7 +6,7 @@ import { callOpenRouter } from './genesis.js'
 
 /**
  * Extrae evidencia objetiva del repositorio para fundamentar el análisis de la IA (Grounding).
- * Cero heurísticas inventadas: solo inspección de archivos, rutas, modelos y dependencias reales.
+ * Inspección directa y determinista de archivos, rutas, modelos y dependencias reales.
  */
 export function collectCodebaseEvidence(projectRoot = process.cwd()) {
   const baseFindings = scanProject(projectRoot)
@@ -279,7 +279,7 @@ export function extractJsonFromAi(text) {
 
 /**
  * Ejecuta el descubrimiento inteligente de todos los flujos de negocio del proyecto usando IA real (OpenRouter).
- * Cero heurísticas inventadas: la IA analiza el mapa de código y sintetiza los flujos y secuencias UML.
+ * Inspección 100% sobre código real: la IA analiza el mapa de código y sintetiza los flujos y secuencias UML.
  */
 export async function discoverFlowsWithAi({ projectRoot = process.cwd(), apiKey, model }) {
   // 1. Recolectar la evidencia de código fuente
@@ -299,7 +299,7 @@ Tu misión es realizar INGENIERÍA INVERSA SEMÁNTICA de un proyecto real existe
 A partir de la evidencia del código fuente (rutas, controladores, pantallas, modelos de base de datos e integraciones), debes descubrir y mapear TODOS los flujos de negocio de punta a punta que existen en la aplicación (por ejemplo: Autenticación & Sesión, Catálogo & Compra/Checkout, Gestión de Entidades/Recursos, Procesamiento Asíncrono, etc.).
 
 REGLAS ESTRICTAS:
-1. No inventes código ni uses heurísticas fijas. Basa cada flujo en las rutas, vistas y modelos reales encontrados en la evidencia.
+1. No inventes código. Basa cada flujo estrictamente en las rutas, vistas y modelos reales encontrados en la evidencia.
 2. Cada flujo debe tener sus nodos ordenados cronológicamente (desde el trigger de UI o API hasta la persistencia o respuesta).
 3. Cada nodo debe especificar sus 'scopeFiles' reales tomados del repositorio.
 4. Para cada flujo descubierto, genera un diagrama de secuencia Mermaid válido (sequenceDiagram con autonumber y participantes claros).

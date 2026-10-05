@@ -87,6 +87,34 @@ export function renderDiscovery() {
   if (statPercent) statPercent.innerText = `${percent}%`;
   if (badgeTab) badgeTab.innerText = `${totalQuestions} Qs`;
 
+  // Spec Kit Idea Assessment Verdict calculation
+  const verdictPill = document.getElementById('assessment-verdict-pill');
+  const rationaleText = document.getElementById('assessment-rationale-text');
+  const metricsBadge = document.getElementById('assessment-metrics-badge');
+  const badgeIcon = document.getElementById('assessment-badge-icon');
+
+  if (verdictPill) {
+    if (percent >= 70) {
+      verdictPill.innerText = 'VEREDICTO: GO ✓';
+      verdictPill.className = 'text-[10px] font-mono font-black px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200';
+      if (badgeIcon) badgeIcon.className = 'w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-black shrink-0';
+      if (rationaleText) rationaleText.innerText = 'Problema, requerimientos y límites con suficiente claridad para avanzar a especificación e implementación.';
+      if (metricsBadge) metricsBadge.innerText = `Claridad: ${percent}% • Viabilidad Alta`;
+    } else if (percent >= 30) {
+      verdictPill.innerText = 'VEREDICTO: CLARIFY ⚠️';
+      verdictPill.className = 'text-[10px] font-mono font-black px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200';
+      if (badgeIcon) badgeIcon.className = 'w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-black shrink-0';
+      if (rationaleText) rationaleText.innerText = 'Faltan definiciones clave de alcance, base de datos o stack. Responde más preguntas antes de programar.';
+      if (metricsBadge) metricsBadge.innerText = `Claridad: ${percent}% • Requiere Aclaración`;
+    } else {
+      verdictPill.innerText = 'VEREDICTO: STOP ⛔';
+      verdictPill.className = 'text-[10px] font-mono font-black px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200';
+      if (badgeIcon) badgeIcon.className = 'w-10 h-10 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center font-black shrink-0';
+      if (rationaleText) rationaleText.innerText = 'Idea en etapa embrionaria. Define el dolor raíz y los Non-Goals V1 para evitar dispersión.';
+      if (metricsBadge) metricsBadge.innerText = `Claridad: ${percent}% • Riesgo de Dispersión Alto`;
+    }
+  }
+
   const statusFilter = document.getElementById('discovery-status-select')?.value || 'all';
 
   // Filtrar sesiones según la pestaña activa

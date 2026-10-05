@@ -418,7 +418,7 @@ export async function sendGenesisChatMessage() {
     return;
   }
 
-  // OpenRouter / Local Heuristic
+  // OpenRouter / Agente IDE
   const agentBubble = document.createElement('div');
   agentBubble.className = 'flex gap-3.5 items-start max-w-[92%]';
   const bubbleId = 'agent-msg-' + Date.now();
@@ -427,7 +427,7 @@ export async function sendGenesisChatMessage() {
   const isUsingOpenRouter = (state.selectedEngine === 'openrouter');
   const modelShortName = isUsingOpenRouter 
     ? (state.selectedModel.split('/')[1]?.split(':')[0] || 'Ling 3.0 Flash') 
-    : 'Motor Heurístico Local';
+    : 'Agente IDE';
 
   agentBubble.innerHTML = `
     <div class="w-9 h-9 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-lg shadow-purple-600/20 ring-2 ring-purple-100 mt-0.5">
@@ -439,7 +439,7 @@ export async function sendGenesisChatMessage() {
           <span class="w-2.5 h-2.5 rounded-full bg-purple-600 animate-ping"></span>
           <span class="font-black text-[11px] text-purple-950 uppercase tracking-wider">Arquitecto SDD</span>
           <span class="text-[9px] font-mono px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 font-bold border border-purple-200">
-            ${isUsingOpenRouter ? 'OpenRouter :free' : 'Local Heurístico'}
+            ${isUsingOpenRouter ? 'OpenRouter :free' : 'Agente IDE'}
           </span>
         </div>
         <span class="text-[10px] font-mono px-2.5 py-0.5 rounded-lg bg-zinc-100 text-purple-900 border border-purple-200 flex items-center gap-1.5 font-bold">

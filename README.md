@@ -50,7 +50,7 @@ sdd init --scan
 # o simplemente:
 sdd scan
 ```
-1. El escáner heurístico analiza el repositorio:
+1. El escáner de código analiza el repositorio en profundidad:
    - Framework y lenguaje (Next.js, FastAPI, Go, Express, Vite, etc.).
    - Modelos de base de datos (Prisma, SQL, Drizzle).
    - Rutas y controladores de API.
@@ -99,7 +99,7 @@ Cuando un agente (Cursor, Windsurf, Claude Code, Antigravity) abre el proyecto, 
 
 * `sdd` o `sdd studio [--port 3030]`: Inicia el microservidor y el Studio visual.
 * `sdd init [--scan]`: Inicializa `.sdd/` y `AGENTS.md` en el directorio actual.
-* `sdd scan`: Ejecuta el análisis heurístico y actualiza la arquitectura en disco.
+* `sdd scan`: Ejecuta el análisis de código fuente y actualiza la arquitectura en disco.
 * `sdd drift`: Audita el estado de Git contra los archivos declarados y muestra el score de deriva.
 
 ---

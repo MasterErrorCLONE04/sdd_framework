@@ -3,9 +3,8 @@ import path from 'path'
 import { extractJsonFromAi } from './flows-ai.js'
 
 /**
- * Construye la estructura de especificación de las 12 perspectivas
- * a partir de la respuesta generada por la IA de OpenRouter.
- * Cero heurísticas fijas ni datos simulados.
+ * Construcción de especificación de las 12 perspectivas
+ * a partir de la respuesta generada por la IA de OpenRouter con datos reales.
  */
 export function buildSpecFromAi(aiData, rawText = '') {
   const projName = aiData.projectName || 'NuevoProyecto'
@@ -604,8 +603,7 @@ export async function callOpenRouter({ apiKey, model, messages = [], systemPromp
 }
 
 /**
- * Procesa un turno de chat conversacional en Modo Génesis 100% basado en IA real (OpenRouter).
- * No utiliza ninguna heurística fija ni plantillas simuladas.
+ * Procesa un turno de chat conversacional en Modo Génesis 100% basado en IA real (OpenRouter) sobre contexto real.
  */
 export async function processGenesisChat(messages = [], currentPreview = null, options = {}) {
   const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content || ''

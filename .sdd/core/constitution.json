@@ -1,0 +1,47 @@
+{
+  "title": "Constitución de Ingeniería & Invariantes Técnicos",
+  "version": "1.0.0",
+  "lastUpdated": "2026-10-05T09:50:00Z",
+  "principles": [
+    {
+      "id": "const-1",
+      "category": "Code Quality",
+      "name": "Tipado Estricto & Cero Dependencias Invasivas",
+      "rule": "El código debe ser modular, tipado y evitar librerías invasivas sin justificación explícita.",
+      "severity": "mandatory",
+      "status": "active"
+    },
+    {
+      "id": "const-2",
+      "category": "Testing & Convergence",
+      "name": "Criterios Gherkin Ejecutables",
+      "rule": "Toda funcionalidad debe acompañarse de verificación de criterios Dado-Cuando-Entonces antes del cierre.",
+      "severity": "mandatory",
+      "status": "active"
+    },
+    {
+      "id": "const-3",
+      "category": "Scope Isolation",
+      "name": "Escudo de Deriva (Scope Shield)",
+      "rule": "Los agentes de IA tienen estrictamente prohibido modificar archivos fuera de los declarados en scopeFiles.",
+      "severity": "mandatory",
+      "status": "active"
+    },
+    {
+      "id": "const-4",
+      "category": "Architecture",
+      "name": "Separación Limpia de Capas",
+      "rule": "La lógica de negocio debe residir en servicios desacoplados de la presentación visual y del transporte HTTP.",
+      "severity": "mandatory",
+      "status": "active"
+    },
+    {
+      "id": "const-5",
+      "category": "Security & Resilience",
+      "name": "Manejo Defensivo de Datos & Secretos",
+      "rule": "Nunca quemar claves API o credenciales en código ni en artefactos expuestos al cliente.",
+      "severity": "mandatory",
+      "status": "active"
+    }
+  ]
+}

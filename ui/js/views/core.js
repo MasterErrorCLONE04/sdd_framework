@@ -133,6 +133,47 @@ export function renderCore() {
       </div>
     `).join('') || '<div class="text-xs text-zinc-400">Sin non-goals registrados.</div>';
   }
+
+  // 3. Constitution Principles (Spec Kit Invariants)
+  const constObj = c?.constitution || {};
+  const principles = constObj.principles || [];
+  const constContainer = document.getElementById('core-constitution-list');
+  const constActiveBadge = document.getElementById('constitution-active-count');
+
+  const activeCount = principles.filter(p => p.status === 'active').length;
+  if (constActiveBadge) constActiveBadge.innerText = `${activeCount} de ${principles.length} Invariantes Activos`;
+
+  if (constContainer) {
+    constContainer.innerHTML = principles.map(p => {
+      const isActive = p.status === 'active';
+      return `
+        <div class="p-3.5 rounded-xl border transition-all ${isActive ? 'bg-purple-50/30 border-purple-200' : 'bg-zinc-50 border-zinc-200 opacity-60'} space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <span class="text-[9px] font-mono font-bold px-2 py-0.5 rounded-full uppercase ${isActive ? 'bg-purple-100 text-purple-800' : 'bg-zinc-200 text-zinc-700'}">
+                ${p.category || 'General'}
+              </span>
+              <span class="text-xs font-black ${isActive ? 'text-zinc-900' : 'text-zinc-500'}">
+                ${p.name || p.id}
+              </span>
+            </div>
+            <button
+              onclick="toggleConstitutionPrinciple('${p.id}')"
+              class="text-[10px] font-mono font-bold px-2 py-0.5 rounded cursor-pointer transition-colors ${
+                isActive ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'bg-zinc-200 text-zinc-600 hover:bg-zinc-300'
+              }"
+              title="Click para activar/desactivar invariante"
+            >
+              ${isActive ? 'ACTIVO ✓' : 'DESACTIVADO'}
+            </button>
+          </div>
+          <p class="text-[11px] ${isActive ? 'text-zinc-700' : 'text-zinc-500'} leading-relaxed font-normal">
+            ${p.rule || ''}
+          </p>
+        </div>
+      `;
+    }).join('') || '<div class="text-xs text-zinc-400">Sin invariantes constitucionales registrados.</div>';
+  }
 }
 
 export async function toggleGate(gateId, nextPassed) {
@@ -149,3 +190,14 @@ export async function toggleGate(gateId, nextPassed) {
     showToast('Error al actualizar compuerta', 'alert-circle');
   }
 }
+
+export async function toggleConstitutionPrinciple(principleId) {
+  try {
+    await patchSdd({ togglePrincipleId: principleId });
+    showToast('Invariante de constitución actualizado');
+    if (window.loadData) await window.loadData();
+  } catch (err) {
+    showToast('Error al mutar invariante', 'alert-circle');
+  }
+}
+
