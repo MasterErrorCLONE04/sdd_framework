@@ -23,6 +23,7 @@ import {
   renderSidebarHistory,
   selectChatSession,
   deleteChatSession,
+  clearAllChatSessions,
   startNewChatProject,
   setPromptIdea,
   handleChatKeyDown,
@@ -114,6 +115,7 @@ window.finishAndRefreshWorkbench = finishAndRefreshWorkbench;
 window.renderSidebarHistory = renderSidebarHistory;
 window.selectChatSession = selectChatSession;
 window.deleteChatSession = deleteChatSession;
+window.clearAllChatSessions = clearAllChatSessions;
 window.startNewChatProject = startNewChatProject;
 window.setPromptIdea = setPromptIdea;
 window.handleChatKeyDown = handleChatKeyDown;

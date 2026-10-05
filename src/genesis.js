@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { extractJsonFromAi } from './flows-ai.js'
+import { normalizeProjectModel, calculateProjectProgress, normalizeBusinessRule, normalizeUserFlow, normalizeBusinessFlow, normalizeTechStack, normalizeEndpoint, normalizeApiContract, normalizeDatabaseTable, normalizeDatabaseRelationship, STAGES } from './model-schema.js'
 
 /**
  * Construcción de especificación de las 12 perspectivas
@@ -49,6 +50,7 @@ export function buildSpecFromAi(aiData, rawText = '') {
         status: 'backlog',
         origin: 'ai',
         scopeFiles: Array.isArray(st.scopeFiles) && st.scopeFiles.length > 0 ? st.scopeFiles : ['src/**', 'app/**'],
+        businessRuleIds: Array.isArray(st.businessRuleIds) ? st.businessRuleIds : (i === 0 ? ['BR-001'] : []),
         acceptanceCriteria: Array.isArray(st.acceptanceCriteria) && st.acceptanceCriteria.length > 0
           ? st.acceptanceCriteria.map((c, ci) => ({
               id: c.id || `c-${ci + 1}`,
@@ -75,6 +77,7 @@ export function buildSpecFromAi(aiData, rawText = '') {
           status: 'backlog',
           origin: 'ai',
           scopeFiles: ['app/**', 'src/**'],
+          businessRuleIds: ['BR-001'],
           acceptanceCriteria: [
             { id: 'c-1', scenario: 'Acceso seguro', given: 'un usuario con credenciales', when: 'inicia sesión', then: 'accede al dashboard principal', done: false }
           ]
@@ -95,16 +98,53 @@ export function buildSpecFromAi(aiData, rawText = '') {
       ]
 
   // 5. Modelo ERD / Base de Datos definido por la IA
-  const tables = Array.isArray(aiData.database) && aiData.database.length > 0
-    ? aiData.database.map((t, i) => ({
-        id: `tbl-${i + 1}`,
-        table: t.table || t.name,
-        description: t.description || `Tabla de ${t.table}`,
-        columns: Array.isArray(t.columns) ? t.columns : ['id (UUID)', 'createdAt (DateTime)']
-      }))
-    : [
-        { id: 'tbl-1', table: 'users', description: 'Usuarios y credenciales', columns: ['id (UUID)', 'email (String)', 'role (String)', 'createdAt (DateTime)'] }
-      ]
+  const tables = (Array.isArray(aiData.database?.tables) && aiData.database.tables.length > 0
+    ? aiData.database.tables
+    : (Array.isArray(aiData.database) && aiData.database.length > 0 ? aiData.database : [
+        {
+          id: 'tbl-01',
+          table: 'users',
+          description: 'Usuarios y credenciales del sistema',
+          columns: [
+            { name: 'id', type: 'UUID', isPk: true, notNull: true, unique: true },
+            { name: 'email', type: 'VARCHAR(255)', notNull: true, unique: true },
+            { name: 'role', type: 'VARCHAR(50)', notNull: true, default: "'user'" },
+            { name: 'created_at', type: 'TIMESTAMP', notNull: true }
+          ]
+        },
+        {
+          id: 'tbl-02',
+          table: 'items',
+          description: `Entidad operativa principal de ${projName}`,
+          columns: [
+            { name: 'id', type: 'UUID', isPk: true, notNull: true, unique: true },
+            { name: 'user_id', type: 'UUID', notNull: true },
+            { name: 'title', type: 'VARCHAR(255)', notNull: true },
+            { name: 'status', type: 'VARCHAR(50)', notNull: true, default: "'active'" },
+            { name: 'created_at', type: 'TIMESTAMP', notNull: true }
+          ],
+          foreignKeys: [
+            { column: 'user_id', referencedTable: 'users', referencedColumn: 'id' }
+          ]
+        }
+      ])).map(normalizeDatabaseTable)
+
+  const relationships = (Array.isArray(aiData.database?.relationships) && aiData.database.relationships.length > 0
+    ? aiData.database.relationships
+    : (Array.isArray(aiData.relationships) && aiData.relationships.length > 0 ? aiData.relationships : (
+        tables.length > 1 ? [
+          {
+            id: 'rel-01',
+            fromTable: tables[1].table,
+            fromColumn: 'user_id',
+            toTable: tables[0].table,
+            toColumn: 'id',
+            type: '1:N',
+            onDelete: 'CASCADE',
+            description: `Relación 1:N entre ${tables[0].table} y ${tables[1].table}`
+          }
+        ] : []
+      ))).map(normalizeDatabaseRelationship)
 
   // 6. Nodos de Flujo Conectados
   const flowNodes = services.map((s, i) => ({
@@ -178,11 +218,60 @@ export function buildSpecFromAi(aiData, rawText = '') {
       }
     },
     requirements: {
-      epics: [
-        { id: 'EPIC-01', title: 'Funcionalidades Centrales de la V1', status: 'in_progress', targetSprint: 'Sprint 1' }
+      epics: Array.isArray(aiData.epics) && aiData.epics.length > 0 ? aiData.epics : [
+        { id: 'EPIC-01', title: 'Funcionalidades Centrales de la V1', status: 'in_progress', targetSprint: 'Sprint 1', moduleId: 'mod-1', storyIds: stories.map(s => s.id) }
       ],
-      userStories: stories
+      userStories: stories,
+      businessRules: Array.isArray(aiData.businessRules) && aiData.businessRules.length > 0
+        ? aiData.businessRules.map((br, i) => normalizeBusinessRule(br, i))
+        : [
+            normalizeBusinessRule({
+              id: 'BR-001',
+              code: 'BR-001',
+              title: `Integridad de Datos en ${projName}`,
+              rule: 'Toda petición que modifique estado debe validar esquemas y autenticación antes de persistir.',
+              category: 'Validation & Security',
+              severity: 'mandatory',
+              enforcedAt: ['api', 'ui'],
+              relatedStories: stories.slice(0, 2).map(s => s.id)
+            }, 0)
+          ]
     },
+    userFlows: Array.isArray(aiData.userFlows) && aiData.userFlows.length > 0
+      ? aiData.userFlows.map(normalizeUserFlow)
+      : [
+          normalizeUserFlow({
+            id: 'uf-01',
+            name: `Recorrido de ${personas[0]?.role || 'Usuario'} en ${projName}`,
+            actorId: personas[0]?.id || 'actor-user',
+            actor: personas[0]?.role || 'Usuario',
+            startScreen: '/',
+            endScreen: '/dashboard',
+            description: `Ruta principal de interacción para ${personas[0]?.role || 'el usuario'} en la V1.`,
+            steps: [
+              { order: 1, screen: '/', action: 'Ingreso al sistema y visualización de opciones', outcome: 'Carga de dashboard' },
+              { order: 2, screen: '/', action: `Ejecuta acción principal de ${projName}`, outcome: 'Procesamiento de datos' },
+              { order: 3, screen: '/dashboard', action: 'Confirma resultado', outcome: 'Confirmación visual exitosa' }
+            ]
+          }, 0)
+        ],
+    businessFlows: Array.isArray(aiData.businessFlows) && aiData.businessFlows.length > 0
+      ? aiData.businessFlows.map(normalizeBusinessFlow)
+      : [
+          normalizeBusinessFlow({
+            id: 'bf-01',
+            name: `Pipeline Operativo — ${projName}`,
+            description: 'Recorrido transaccional del backend de punta a punta.',
+            priority: 'P0',
+            progress: 0,
+            origin: 'spec',
+            trigger: 'Solicitud del usuario o webhook externo',
+            nodes: flowNodes,
+            edges: flowEdges,
+            relatedStories: stories.map(s => s.id),
+            relatedRules: ['BR-001']
+          }, 0)
+        ],
     flows: [
       {
         id: '01-flujo-principal',
@@ -196,7 +285,8 @@ export function buildSpecFromAi(aiData, rawText = '') {
       services
     },
     database: {
-      tables
+      tables,
+      relationships
     },
     currentPhase: aiData.currentPhase || 1,
     phaseTitle: aiData.phaseTitle || 'Estructuración de Requerimientos',
@@ -256,7 +346,84 @@ export function buildSpecFromAi(aiData, rawText = '') {
     },
     discovery: {
       interviewSessions: buildDiscoveryInterviews(projName, purpose, depth, services)
-    }
+    },
+    product: {
+      vision: {
+        problem: aiData.problem?.statement || (typeof aiData.problem === 'string' ? aiData.problem : `Resolver la automatización de ${projName}.`),
+        targetAudience: personas[0]?.role || 'Usuarios principales del sistema',
+        valueProposition: aiData.tagline || `Plataforma ${projName} gobernada bajo protocolo SDD`,
+        coreGoals: Array.isArray(aiData.problem?.painPoints) ? aiData.problem.painPoints.map(p => p.pain || p) : [],
+        successMetrics: Array.isArray(aiData.successCriteria?.metrics) ? aiData.successCriteria.metrics : []
+      },
+      scope: {
+        inScopeV1: Array.isArray(aiData.inScopeV1) ? aiData.inScopeV1 : ['Funcionalidad mínima viable para V1'],
+        explicitNonGoals: nonGoals.map(ng => ng.feature || ng),
+        futureBacklog: Array.isArray(aiData.futureBacklog) ? aiData.futureBacklog : []
+      },
+      actors: personas,
+      modules: Array.isArray(aiData.modules) ? aiData.modules : [
+        { id: 'mod-1', name: 'Gestión Principal', description: `Núcleo de operaciones de ${projName}` }
+      ]
+    },
+    businessRules: Array.isArray(aiData.businessRules) ? aiData.businessRules.map((br, i) => ({
+      id: br.id || `BR-${String(i + 1).padStart(3, '0')}`,
+      code: br.code || `BR-${String(i + 1).padStart(3, '0')}`,
+      rule: br.rule || br.title || br.description,
+      category: br.category || 'Business Logic',
+      enforcedAt: br.enforcedAt || ['api', 'ui']
+    })) : [],
+    stack: normalizeTechStack(aiData.stack || {
+      frontend: { framework: 'Modern Web / Vanilla / Vite', language: 'JavaScript / TypeScript', styling: 'Vanilla CSS / Tailwind' },
+      backend: { framework: 'Node.js REST API', runtime: 'Node >= 18', architecturePattern: 'Layered Services' },
+      database: { engine: 'PostgreSQL 16 / SQLite', orm: 'Prisma / SQL' },
+      auth: { strategy: 'JWT / Session Bearer', rbac: true },
+      deployment: { target: 'Local / Docker', ciCd: 'GitHub Actions' }
+    }),
+    api: {
+      endpoints: (Array.isArray(aiData.endpoints) && aiData.endpoints.length > 0 ? aiData.endpoints : [
+        { id: 'api-01', method: 'GET', path: '/api/v1/health', summary: 'Healthcheck del servicio', actor: 'public', statusCodes: [200] },
+        { id: 'api-02', method: 'GET', path: '/api/v1/items', summary: `Listar elementos de ${projName}`, actor: 'user', requestDto: null, responseDto: 'ItemsListDTO', relatedStoryIds: stories.slice(0, 1).map(s => s.id) },
+        { id: 'api-03', method: 'POST', path: '/api/v1/items', summary: `Crear elemento en ${projName}`, actor: 'user', requestDto: 'CreateItemDTO', responseDto: 'ItemDetailDTO', relatedRuleIds: ['BR-001'], relatedStoryIds: stories.slice(0, 1).map(s => s.id) }
+      ]).map(normalizeEndpoint),
+      contracts: (Array.isArray(aiData.apiContracts || aiData.contracts) && (aiData.apiContracts || aiData.contracts).length > 0 ? (aiData.apiContracts || aiData.contracts) : [
+        {
+          id: 'dto-01',
+          name: 'CreateItemDTO',
+          description: `Cuerpo de petición para crear un registro en ${projName}`,
+          properties: [
+            { name: 'title', type: 'string', required: true, description: 'Título o nombre' },
+            { name: 'description', type: 'string', required: false, description: 'Detalle opcional' }
+          ]
+        },
+        {
+          id: 'dto-02',
+          name: 'ItemDetailDTO',
+          description: `Representación de un registro en ${projName}`,
+          properties: [
+            { name: 'id', type: 'string', required: true, description: 'Identificador único' },
+            { name: 'title', type: 'string', required: true, description: 'Título' },
+            { name: 'status', type: 'string', required: true, description: 'Estado actual' },
+            { name: 'createdAt', type: 'string', required: true, description: 'Marca temporal ISO' }
+          ]
+        }
+      ]).map(normalizeApiContract)
+    },
+    execution: {
+      phases: [
+        { id: 'phase-1', name: 'Fase 1: Configuración & Base de Datos', order: 1, status: 'planned', taskIds: [] },
+        { id: 'phase-2', name: 'Fase 2: Lógica de Negocio & API', order: 2, status: 'planned', taskIds: [] },
+        { id: 'phase-3', name: 'Fase 3: Interfaz Web & Integración', order: 3, status: 'planned', taskIds: [] }
+      ],
+      tasks: stories.map((st) => ({
+        id: `task-${st.id}`,
+        storyId: st.id,
+        title: st.title,
+        status: 'planned',
+        scopeFiles: st.scopeFiles || ['src/**'],
+        acceptanceCriteria: st.acceptanceCriteria || []
+      }))
+    },
+    stage: aiData.stage || (aiData.currentPhase === 1 ? 'discovery' : (aiData.currentPhase === 2 ? 'product' : 'requirements'))
   }
 }
 
@@ -374,27 +541,236 @@ export function buildDiscoveryInterviews(projectName, purpose, depth, services =
 }
 
 /**
+ * Análisis heurístico y semántico de impacto ante cambios introducidos por el usuario
+ */
+export function analyzeImpact(message = '', currentPreview = null) {
+  const text = (message || '').toLowerCase()
+  const impacts = []
+  const affectedDomains = []
+  const suggestedAdjustments = []
+
+  // Heurísticas de impacto en alcance / eliminación
+  if (text.includes('no quiero') || text.includes('sin') || text.includes('eliminar') || text.includes('quitar') || text.includes('remover') || text.includes('cancelar')) {
+    if (text.includes('movil') || text.includes('móvil') || text.includes('app') || text.includes('ios') || text.includes('android')) {
+      affectedDomains.push('product.scope', 'uiUx.screens', 'architecture.topology')
+      impacts.push('Exclusión de aplicación móvil de la V1')
+      suggestedAdjustments.push('Añadir "App móvil nativa en V1" a explicitNonGoals en scope.json')
+      suggestedAdjustments.push('Focalizar arquitectura en Web Responsive (Next.js / Vite)')
+    }
+    if (text.includes('pago') || text.includes('cobro') || text.includes('stripe') || text.includes('tarjeta') || text.includes('monetiza')) {
+      affectedDomains.push('product.scope', 'requirements.stories', 'api.endpoints')
+      impacts.push('Postergación del módulo de procesamiento de pagos')
+      suggestedAdjustments.push('Mover integración de pasarela de pago a futureBacklog')
+    }
+    if (text.includes('auth') || text.includes('login') || text.includes('registro') || text.includes('contraseña')) {
+      affectedDomains.push('product.actors', 'requirements.stories', 'architecture.stack')
+      impacts.push('Simplificación del mecanismo de autenticación')
+      suggestedAdjustments.push('Adoptar acceso por enlace mágico o permitir navegación anónima en V1')
+    }
+  }
+
+  // Heurísticas de impacto en expansión / adición
+  if (text.includes('agregar') || text.includes('incluir') || text.includes('añadir') || text.includes('también') || text.includes('necesito') || text.includes('quiero que')) {
+    if (text.includes('reporte') || text.includes('dashboard') || text.includes('analítica') || text.includes('estadística') || text.includes('grafic')) {
+      affectedDomains.push('product.modules', 'uiUx.screens', 'requirements.stories')
+      impacts.push('Incorporación de Módulo de Métricas y Analítica')
+      suggestedAdjustments.push('Crear módulo "Métricas & Reportes" con vista SCR-Analytics')
+    }
+    if (text.includes('notific') || text.includes('email') || text.includes('correo') || text.includes('whatsapp') || text.includes('sms')) {
+      affectedDomains.push('architecture.topology', 'requirements.stories', 'flows.businessFlows')
+      impacts.push('Incorporación de Servicio de Mensajería / Notificaciones')
+      suggestedAdjustments.push('Añadir servicio de notificaciones asíncrono y tareas de integración')
+    }
+    if (text.includes('rol') || text.includes('permiso') || text.includes('supervisor') || text.includes('mesero') || text.includes('cajero') || text.includes('repartidor')) {
+      affectedDomains.push('product.actors', 'requirements.rolesMatrix', 'uiUx.screens')
+      impacts.push('Ampliación de roles de usuario y permisos RBAC')
+      suggestedAdjustments.push('Registrar nuevos actores en product/actors.json con permisos específicos')
+    }
+  }
+
+  return {
+    hasImpact: impacts.length > 0,
+    detectedChange: impacts.join('; ') || 'Ajuste de especificación en diálogo con el usuario',
+    affectedDomains: Array.from(new Set(affectedDomains)),
+    suggestedAdjustments
+  }
+}
+
+/**
+ * Persistencia atómica de artefactos por cada etapa de Génesis
+ */
+export function persistGenesisStage(projectRoot, stage, stageData = {}) {
+  const sddDir = path.join(projectRoot, '.sdd')
+  const productDir = path.join(sddDir, 'product')
+  const reqDir = path.join(sddDir, 'requirements')
+  const flowsDir = path.join(sddDir, 'flows')
+  const archDir = path.join(sddDir, 'architecture')
+  const apiDir = path.join(sddDir, 'api')
+  const execDir = path.join(sddDir, 'execution')
+  const govDir = path.join(sddDir, 'governance')
+  const uiDir = path.join(sddDir, 'ui-ux')
+
+  // Asegurar carpetas
+  ;[sddDir, productDir, reqDir, flowsDir, archDir, apiDir, execDir, govDir, uiDir].forEach(d => {
+    if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true })
+  })
+
+  const projFile = path.join(sddDir, 'project.json')
+  let project = {}
+  try {
+    if (fs.existsSync(projFile)) project = JSON.parse(fs.readFileSync(projFile, 'utf-8'))
+  } catch {}
+
+  const completed = Array.isArray(project.completedStages) ? [...project.completedStages] : []
+  if (!completed.includes(stage)) completed.push(stage)
+
+  switch (stage) {
+    case 'discovery': {
+      if (stageData.vision) {
+        fs.writeFileSync(path.join(productDir, 'vision.json'), JSON.stringify(stageData.vision, null, 2), 'utf-8')
+      }
+      if (stageData.actors) {
+        fs.writeFileSync(path.join(productDir, 'actors.json'), JSON.stringify(stageData.actors, null, 2), 'utf-8')
+      }
+      if (stageData.projectName) project.name = stageData.projectName
+      if (stageData.tagline) project.tagline = stageData.tagline
+      project.stage = 'product'
+      project.progress = Math.max(project.progress || 0, 25)
+      break
+    }
+
+    case 'product': {
+      if (stageData.scope) {
+        fs.writeFileSync(path.join(productDir, 'scope.json'), JSON.stringify(stageData.scope, null, 2), 'utf-8')
+      }
+      if (stageData.modules) {
+        fs.writeFileSync(path.join(productDir, 'modules.json'), JSON.stringify(stageData.modules, null, 2), 'utf-8')
+      }
+      project.stage = 'requirements'
+      project.progress = Math.max(project.progress || 0, 45)
+      break
+    }
+
+    case 'requirements': {
+      if (stageData.stories) {
+        const storiesDir = path.join(reqDir, 'stories')
+        if (!fs.existsSync(storiesDir)) fs.mkdirSync(storiesDir, { recursive: true })
+        stageData.stories.forEach(st => {
+          fs.writeFileSync(path.join(storiesDir, `${st.id}.json`), JSON.stringify(st, null, 2), 'utf-8')
+        })
+        fs.writeFileSync(path.join(reqDir, 'user-stories.json'), JSON.stringify(stageData.stories, null, 2), 'utf-8')
+      }
+      if (stageData.epics) {
+        fs.writeFileSync(path.join(reqDir, 'epics.json'), JSON.stringify(stageData.epics, null, 2), 'utf-8')
+      }
+      if (stageData.businessRules) {
+        fs.writeFileSync(path.join(reqDir, 'business-rules.json'), JSON.stringify(stageData.businessRules, null, 2), 'utf-8')
+      }
+      if (stageData.userFlows) {
+        fs.writeFileSync(path.join(flowsDir, 'user-flows.json'), JSON.stringify(stageData.userFlows, null, 2), 'utf-8')
+      }
+      if (stageData.businessFlows) {
+        fs.writeFileSync(path.join(flowsDir, 'business-flows.json'), JSON.stringify(stageData.businessFlows, null, 2), 'utf-8')
+      }
+      project.stage = 'architecture'
+      project.progress = Math.max(project.progress || 0, 65)
+      break
+    }
+
+    case 'architecture': {
+      if (stageData.architecture) {
+        fs.writeFileSync(path.join(sddDir, 'architecture.json'), JSON.stringify(stageData.architecture, null, 2), 'utf-8')
+        fs.writeFileSync(path.join(archDir, 'architecture.json'), JSON.stringify(stageData.architecture, null, 2), 'utf-8')
+      }
+      if (stageData.stack) {
+        fs.writeFileSync(path.join(archDir, 'stack.json'), JSON.stringify(normalizeTechStack(stageData.stack), null, 2), 'utf-8')
+      }
+      if (stageData.database) {
+        fs.writeFileSync(path.join(sddDir, 'database', 'schema-erd.json'), JSON.stringify(stageData.database, null, 2), 'utf-8')
+        if (stageData.database.relationships) {
+          fs.writeFileSync(path.join(sddDir, 'database', 'relationships.json'), JSON.stringify(stageData.database.relationships, null, 2), 'utf-8')
+        }
+      }
+      if (stageData.relationships) {
+        fs.writeFileSync(path.join(sddDir, 'database', 'relationships.json'), JSON.stringify(stageData.relationships, null, 2), 'utf-8')
+      }
+      if (stageData.endpoints) {
+        fs.writeFileSync(path.join(apiDir, 'endpoints.json'), JSON.stringify(stageData.endpoints.map(normalizeEndpoint), null, 2), 'utf-8')
+      }
+      if (stageData.contracts) {
+        fs.writeFileSync(path.join(apiDir, 'contracts.json'), JSON.stringify(stageData.contracts.map(normalizeApiContract), null, 2), 'utf-8')
+      }
+      project.stage = 'ux'
+      project.progress = Math.max(project.progress || 0, 80)
+      break
+    }
+
+    case 'ux': {
+      if (stageData.screens) {
+        fs.writeFileSync(path.join(uiDir, 'screens.json'), JSON.stringify(stageData.screens, null, 2), 'utf-8')
+      }
+      if (stageData.wireframes) {
+        fs.writeFileSync(path.join(uiDir, 'wireframes.json'), JSON.stringify(stageData.wireframes, null, 2), 'utf-8')
+      }
+      project.stage = 'execution'
+      project.progress = Math.max(project.progress || 0, 90)
+      break
+    }
+
+    case 'execution': {
+      if (stageData.tasks) {
+        fs.writeFileSync(path.join(execDir, 'tasks.json'), JSON.stringify(stageData.tasks, null, 2), 'utf-8')
+      }
+      if (stageData.phases) {
+        fs.writeFileSync(path.join(execDir, 'phases.json'), JSON.stringify(stageData.phases, null, 2), 'utf-8')
+      }
+      project.stage = 'ready'
+      project.progress = 100
+      break
+    }
+  }
+
+  project.completedStages = completed
+  project.lastUpdated = new Date().toISOString()
+  fs.writeFileSync(projFile, JSON.stringify(project, null, 2), 'utf-8')
+
+  return {
+    success: true,
+    savedStage: stage,
+    nextStage: project.stage,
+    progress: project.progress,
+    completedStages: completed
+  }
+}
+
+/**
  * Escribe atómicamente el resultado de Génesis en disco (.sdd/ y AGENTS.md)
+ * Poblando tanto las entidades canónicas v2 como los archivos de retrocompatibilidad.
  */
 export function scaffoldGenesis(projectRoot, genesisPayload) {
   const sddDir = path.join(projectRoot, '.sdd')
   const coreDir = path.join(sddDir, 'core')
+  const productDir = path.join(sddDir, 'product')
   const reqDir = path.join(sddDir, 'requirements')
   const storiesDir = path.join(reqDir, 'stories')
   const dbDir = path.join(sddDir, 'database')
   const flowsDir = path.join(sddDir, 'flows')
+  const archDir = path.join(sddDir, 'architecture')
+  const apiDir = path.join(sddDir, 'api')
+  const execDir = path.join(sddDir, 'execution')
+  const govDir = path.join(sddDir, 'governance')
   const discDir = path.join(sddDir, 'discovery')
   const qaDir = path.join(sddDir, 'qa')
   const seqDir = path.join(sddDir, 'sequences')
   const uiDir = path.join(sddDir, 'ui-ux')
 
   // Crear carpetas
-  const dirs = [sddDir, coreDir, reqDir, storiesDir, dbDir, flowsDir, discDir, qaDir, seqDir, uiDir]
+  const dirs = [sddDir, coreDir, productDir, reqDir, storiesDir, dbDir, flowsDir, archDir, apiDir, execDir, govDir, discDir, qaDir, seqDir, uiDir]
   dirs.forEach(d => {
     if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true })
   })
 
-  // 1. project.json
+  // 1. project.json (V2 con stage tracking)
   const projectData = {
     name: genesisPayload.project.name,
     tagline: genesisPayload.project.tagline,
@@ -402,11 +778,42 @@ export function scaffoldGenesis(projectRoot, genesisPayload) {
     depth: genesisPayload.project.depth,
     targetLaunchWeeks: genesisPayload.project.targetLaunchWeeks,
     version: '1.0.0',
+    status: 'ready',
+    stage: 'ready',
+    progress: 100,
+    completedStages: ['discovery', 'product', 'requirements', 'flows', 'architecture', 'database', 'api', 'ux', 'execution', 'validation', 'ready'],
     activeSprint: 'Sprint 1',
     lastUpdated: new Date().toISOString(),
     qualityGates: genesisPayload.project.qualityGates
   }
   fs.writeFileSync(path.join(sddDir, 'project.json'), JSON.stringify(projectData, null, 2), 'utf-8')
+
+  // 1.5 product/ (vision.json, scope.json, actors.json, modules.json)
+  const visionData = genesisPayload.product?.vision || {
+    problem: genesisPayload.core?.problem?.statement || '',
+    targetAudience: genesisPayload.core?.targetUsers?.personas?.[0]?.role || '',
+    valueProposition: genesisPayload.project?.tagline || '',
+    coreGoals: (genesisPayload.core?.problem?.painPoints || []).map(p => p.pain || p),
+    successMetrics: genesisPayload.core?.successCriteria?.metrics || []
+  }
+  fs.writeFileSync(path.join(productDir, 'vision.json'), JSON.stringify(visionData, null, 2), 'utf-8')
+
+  const scopeData = genesisPayload.product?.scope || {
+    inScopeV1: genesisPayload.core?.scopeBoundaries?.inScopeV1 || ['Funcionalidad mínima viable'],
+    explicitNonGoals: (genesisPayload.core?.scopeBoundaries?.explicitNonGoals || []).map(ng => typeof ng === 'string' ? ng : ng.feature || ng.title),
+    futureBacklog: genesisPayload.core?.scopeBoundaries?.futureBacklog || []
+  }
+  fs.writeFileSync(path.join(productDir, 'scope.json'), JSON.stringify(scopeData, null, 2), 'utf-8')
+
+  const actorsData = genesisPayload.product?.actors || genesisPayload.core?.targetUsers?.personas || [
+    { id: 'actor-user', name: 'Usuario Principal', role: 'user' }
+  ]
+  fs.writeFileSync(path.join(productDir, 'actors.json'), JSON.stringify(actorsData, null, 2), 'utf-8')
+
+  const modulesData = genesisPayload.product?.modules || [
+    { id: 'mod-1', name: 'Módulo Principal', description: `Núcleo de operaciones de ${genesisPayload.project.name}` }
+  ]
+  fs.writeFileSync(path.join(productDir, 'modules.json'), JSON.stringify(modulesData, null, 2), 'utf-8')
 
   // 2. core/problem.json
   fs.writeFileSync(path.join(coreDir, 'problem.json'), JSON.stringify(genesisPayload.core.problem, null, 2), 'utf-8')
@@ -429,23 +836,81 @@ export function scaffoldGenesis(projectRoot, genesisPayload) {
     fs.writeFileSync(path.join(storiesDir, `${st.id}.json`), JSON.stringify(st, null, 2), 'utf-8')
   })
 
+  // 7.5 requirements/business-rules.json
+  const brData = genesisPayload.requirements?.businessRules || genesisPayload.businessRules || []
+  fs.writeFileSync(path.join(reqDir, 'business-rules.json'), JSON.stringify(brData, null, 2), 'utf-8')
+
   // 8. requirements/epics.json
   fs.writeFileSync(path.join(reqDir, 'epics.json'), JSON.stringify(genesisPayload.requirements?.epics || [], null, 2), 'utf-8')
 
   // 9. requirements/user-stories.json (agrupado)
   fs.writeFileSync(path.join(reqDir, 'user-stories.json'), JSON.stringify(stories, null, 2), 'utf-8')
 
-  // 10. flows/01-flujo-principal.json
-  const flows = genesisPayload.flows || []
+  // 10. flows/ (user-flows.json, business-flows.json y flujos individuales)
+  const userFlows = genesisPayload.userFlows || genesisPayload.flows?.userFlows || []
+  fs.writeFileSync(path.join(flowsDir, 'user-flows.json'), JSON.stringify(userFlows, null, 2), 'utf-8')
+
+  const businessFlows = genesisPayload.businessFlows || genesisPayload.flows?.businessFlows || (Array.isArray(genesisPayload.flows) ? genesisPayload.flows : [])
+  fs.writeFileSync(path.join(flowsDir, 'business-flows.json'), JSON.stringify(businessFlows, null, 2), 'utf-8')
+
+  const flows = Array.isArray(genesisPayload.flows) ? genesisPayload.flows : businessFlows
   flows.forEach(fl => {
-    fs.writeFileSync(path.join(flowsDir, `${fl.id}.json`), JSON.stringify(fl, null, 2), 'utf-8')
+    if (fl && fl.id) {
+      fs.writeFileSync(path.join(flowsDir, `${fl.id}.json`), JSON.stringify(fl, null, 2), 'utf-8')
+    }
   })
 
-  // 11. architecture.json
+  // 11. architecture.json & architecture/stack.json
   fs.writeFileSync(path.join(sddDir, 'architecture.json'), JSON.stringify(genesisPayload.architecture, null, 2), 'utf-8')
+  const stackData = normalizeTechStack(genesisPayload.architecture?.stack || genesisPayload.stack)
+  fs.writeFileSync(path.join(archDir, 'stack.json'), JSON.stringify(stackData, null, 2), 'utf-8')
+  fs.writeFileSync(path.join(archDir, 'architecture.json'), JSON.stringify(genesisPayload.architecture, null, 2), 'utf-8')
 
-  // 12. database/schema-erd.json
-  fs.writeFileSync(path.join(dbDir, 'schema-erd.json'), JSON.stringify(genesisPayload.database, null, 2), 'utf-8')
+  // 11.5 api/endpoints.json & api/contracts.json
+  const endpointsData = (genesisPayload.api?.endpoints || genesisPayload.endpoints || [
+    { id: 'api-01', method: 'GET', path: '/api/v1/health', summary: 'Healthcheck del servicio' }
+  ]).map(normalizeEndpoint)
+  fs.writeFileSync(path.join(apiDir, 'endpoints.json'), JSON.stringify(endpointsData, null, 2), 'utf-8')
+
+  const contractsData = (genesisPayload.api?.contracts || genesisPayload.contracts || []).map(normalizeApiContract)
+  fs.writeFileSync(path.join(apiDir, 'contracts.json'), JSON.stringify(contractsData, null, 2), 'utf-8')
+
+  // 12. database/schema-erd.json & database/relationships.json
+  const rawTables = Array.isArray(genesisPayload.database?.tables) ? genesisPayload.database.tables : (Array.isArray(genesisPayload.database) ? genesisPayload.database : [])
+  const tablesData = rawTables.map(normalizeDatabaseTable)
+  fs.writeFileSync(path.join(dbDir, 'schema-erd.json'), JSON.stringify({ tables: tablesData }, null, 2), 'utf-8')
+
+  const rawRels = Array.isArray(genesisPayload.database?.relationships) ? genesisPayload.database.relationships : (Array.isArray(genesisPayload.relationships) ? genesisPayload.relationships : [])
+  const relsData = rawRels.map(normalizeDatabaseRelationship)
+  fs.writeFileSync(path.join(dbDir, 'relationships.json'), JSON.stringify(relsData, null, 2), 'utf-8')
+
+  // 12.5 execution/ (phases.json, tasks.json)
+  const phasesData = genesisPayload.execution?.phases || [
+    { id: 'phase-1', name: 'Fase 1: Configuración & Base de Datos', order: 1, status: 'planned' },
+    { id: 'phase-2', name: 'Fase 2: Lógica de Negocio & API', order: 2, status: 'planned' },
+    { id: 'phase-3', name: 'Fase 3: Interfaz Web & Integración', order: 3, status: 'planned' }
+  ]
+  fs.writeFileSync(path.join(execDir, 'phases.json'), JSON.stringify(phasesData, null, 2), 'utf-8')
+
+  const tasksData = genesisPayload.execution?.tasks || stories.map(st => ({
+    id: `task-${st.id}`,
+    storyId: st.id,
+    title: st.title,
+    status: 'planned',
+    scopeFiles: st.scopeFiles || ['src/**'],
+    acceptanceCriteria: st.acceptanceCriteria || []
+  }))
+  fs.writeFileSync(path.join(execDir, 'tasks.json'), JSON.stringify(tasksData, null, 2), 'utf-8')
+
+  // 12.8 governance/quality-gates.json
+  const gatesData = [
+    { id: 'gate-problem', name: 'Definición de Problema & Valor', stage: 'discovery', status: 'approved' },
+    { id: 'gate-scope', name: 'Límites de Alcance & Non-Goals', stage: 'product', status: 'approved' },
+    { id: 'gate-requirements', name: 'Historias con Criterios Gherkin', stage: 'requirements', status: 'approved' },
+    { id: 'gate-architecture', name: 'Topología & Base de Datos', stage: 'architecture', status: 'approved' },
+    { id: 'gate-tasks', name: 'Plan de Tareas con Scope Shield', stage: 'execution', status: 'approved' }
+  ]
+  fs.writeFileSync(path.join(govDir, 'quality-gates.json'), JSON.stringify(gatesData, null, 2), 'utf-8')
 
   // 13. sequences/sequences.json & state-machines.json
   const seqList = Array.isArray(genesisPayload.sequences) ? genesisPayload.sequences : (genesisPayload.sequences ? [genesisPayload.sequences] : [])
@@ -617,17 +1082,22 @@ export async function processGenesisChat(messages = [], currentPreview = null, o
   }
 
   const targetModel = options.model || 'inclusionai/ling-3.0-flash-sante:free'
-  
+  const activeStage = options.stage || currentPreview?.stage || 'discovery'
+  const impact = analyzeImpact(lastUserMsg, currentPreview)
+
   // Contexto previo acumulado
   let previousContextStr = ''
   if (currentPreview && typeof currentPreview === 'object') {
     const pName = currentPreview.project?.name || ''
-    const pNonGoals = currentPreview.core?.scopeBoundaries?.explicitNonGoals?.map(ng => ng.feature).join(', ') || ''
+    const pNonGoals = currentPreview.core?.scopeBoundaries?.explicitNonGoals?.map(ng => ng.feature || ng).join(', ') || ''
     const pStories = currentPreview.requirements?.userStories?.map(st => `${st.id}: ${st.title}`).join(' | ') || ''
     const pScreens = currentPreview.uiUx?.screens?.map(sc => `${sc.name} (${sc.route})`).join(', ') || ''
-    if (pName || pNonGoals || pStories || pScreens) {
-      previousContextStr = `\nCONTEXTO ACUMULADO DEL PROYECTO HASTA AHORA:
+    const pModules = currentPreview.product?.modules?.map(m => m.name).join(', ') || ''
+    if (pName || pNonGoals || pStories || pScreens || pModules) {
+      previousContextStr = `\nCONTEXTO ACUMULADO DEL PROJECT MODEL HASTA AHORA:
 - Proyecto: ${pName}
+- Etapa Activa: ${activeStage}
+- Módulos: ${pModules || 'Pendiente de formalizar'}
 - Non-Goals definidos: ${pNonGoals || 'Ninguno aún'}
 - Historias existentes: ${pStories || 'Ninguna aún'}
 - Pantallas mapeadas: ${pScreens || 'Ninguna aún'}
@@ -635,36 +1105,39 @@ Continúa refinando y expandiendo esta especificación acumulativa.`
     }
   }
 
+  let impactContextStr = ''
+  if (impact.hasImpact) {
+    impactContextStr = `\n⚠️ DETECCIÓN DE CAMBIO E IMPACTO SOLICITADO POR EL USUARIO:
+- Cambio detectado: ${impact.detectedChange}
+- Dominios afectados: ${impact.affectedDomains.join(', ')}
+- Ajustes recomendados: ${impact.suggestedAdjustments.join(' | ')}
+Explica brevemente este impacto con claridad y aplica los cambios en el JSON generado.`
+  }
+
   const systemPrompt = `Eres el Mentor Principal de Ingeniería de Software y Arquitecto SDD (Spec-Driven Development).
 Tu misión es educar, acompañar y transformar las ideas del usuario en una especificación de software rigurosa, completa y profesional antes de escribir una sola línea de código.
 
-Este entorno está pensado tanto para expertos como para PERSONAS NO TÉCNICAS que tienen una gran idea pero no saben cómo estructurar software. Por lo tanto, tu lenguaje conversacional debe ser claro, inspirador, didáctico y libre de jerga inútil, explicando el "por qué" de cada práctica de ingeniería.
+Este entorno está pensado tanto para expertos como para PERSONAS NO TÉCNICAS. Tu lenguaje conversacional debe ser claro, inspirador, didáctico y libre de jerga inútil, explicando el "por qué" de cada práctica de ingeniería.
 
-LAS 5 FASES DE LA ESTRUCTURACIÓN DE SOFTWARE SDD:
-1. Fase 1: Problema Raíz, Propósito y Audiencia (El Por Qué y el Quién):
-   - Clarificar el dolor principal, la propuesta de valor y los perfiles de usuario que lo padecen.
-2. Fase 2: Alcance & Non-Goals V1 (El Hasta Dónde):
-   - Explicar la importancia vital de definir lo que NO se hará en la V1 (Non-Goals) para evitar el "scope creep" (dispersión) y no fallar en el lanzamiento.
-3. Fase 3: Historias de Usuario & Casos de Uso con Gherkin (El Qué Debe Suceder):
-   - Estructurar requerimientos con el estándar de la industria: "Como [rol], quiero [acción], para [beneficio]" con criterios formales "Dado-Cuando-Entonces" para que el agente de código no alucine.
-4. Fase 4: Pantallas, UI & Flujos de Navegación (El Cómo se Ve):
-   - Proyectar las vistas principales de la aplicación (rutas como "/", "/dashboard", wireframes descriptivos y checklists).
-5. Fase 5: Arquitectura Técnica & Diagramas UML (El Cómo Opera por Dentro):
-   - Diseñar la topología de servicios, tablas y generar Diagramas UML en sintaxis Mermaid:
-     * Diagrama de Secuencia (Actor -> Frontend -> Backend -> Base de Datos).
-     * Diagrama de Máquina de Estados (Ciclo de vida de la entidad central).
-${previousContextStr}
+ETAPA ACTUAL EN EL PIPELINE: "${activeStage.toUpperCase()}"
+- Si la etapa es DISCOVERY: Enfócate en clarificar el problema raíz, audiencia/actores, propuesta de valor y objetivos de éxito.
+- Si la etapa es PRODUCT: Desglosa el producto en 3 a 5 módulos macro y define rigurosamente los límites de alcance (In-Scope V1 vs Non-Goals explícitos).
+- Si la etapa es REQUIREMENTS: Define épicas, historias de usuario con criterios formales Dado-Cuando-Entonces (Gherkin) y Reglas de Negocio del sistema (BR-001, etc.).
+- Si la etapa es ARCHITECTURE / UX: Diseña servicios, stack tecnológico, tablas ERD, contratos API y pantallas.
+${previousContextStr}${impactContextStr}
 
 FORMATO ESTRICTO DE RESPUESTA:
 Tu respuesta DEBE constar de dos partes:
 1. Explicación didáctica y empática en Markdown en español:
-   - Explica el concepto de ingeniería de la fase actual con un tono cercano de mentor.
+   - Explica el concepto de ingeniería de la etapa actual con un tono cercano de mentor.
    - Presenta las propuestas concretas para el proyecto del usuario.
+   - Si hubo un cambio o impacto, aclara qué se ajustó.
    - Cierra con una pregunta orientadora o invitación clara al siguiente paso.
 2. Al final, un bloque JSON delimitado estrictamente por \`\`\`json y \`\`\` con la especificación acumulativa completa:
 {
+  "stage": "${activeStage}",
   "currentPhase": 1 | 2 | 3 | 4 | 5,
-  "phaseTitle": "Nombre descriptivo de la fase actual (ej: Fase 2: Alcance & Non-Goals)",
+  "phaseTitle": "Nombre descriptivo de la etapa actual",
   "projectName": "NombreDelSoftware",
   "tagline": "Eslogan conciso y profesional",
   "purpose": "comercial",
@@ -678,8 +1151,15 @@ Tu respuesta DEBE constar de dos partes:
   "targetUsers": [
     { "id": "usr-1", "role": "Rol de usuario", "need": "Necesidad concreta", "frequency": "Diaria|Recurrente" }
   ],
+  "modules": [
+    { "id": "mod-1", "name": "Nombre del Módulo", "description": "Qué resuelve este módulo" }
+  ],
+  "inScopeV1": ["Funcionalidad confirmada para V1"],
   "nonGoals": [
     { "feature": "Funcionalidad que NO irá en V1", "rationale": "Justificación estratégica de ingeniería" }
+  ],
+  "businessRules": [
+    { "id": "BR-001", "code": "BR-001", "rule": "Regla de negocio obligatoria", "category": "Business Logic" }
   ],
   "stories": [
     {
@@ -700,7 +1180,7 @@ Tu respuesta DEBE constar de dos partes:
       "id": "SCR-01",
       "name": "Nombre de la Pantalla",
       "route": "/ruta",
-      "description": "Descripción visual de la pantalla y sus componentes clave",
+      "description": "Descripción visual de la pantalla y componentes clave",
       "layout": "standard-app",
       "checklist": [
         { "id": "chk-1", "text": "Elemento verificable en la UI", "done": false }
@@ -710,15 +1190,14 @@ Tu respuesta DEBE constar de dos partes:
   "services": [
     { "id": "svc-1", "label": "Nombre del Servicio", "tech": "Stack tecnológico", "type": "Frontend|Backend|Database" }
   ],
-  "sequenceUml": "sequenceDiagram\\n    autonumber\\n    actor U as 👤 Usuario\\n    participant FE as 🖥️ Frontend Web\\n    participant BE as ⚡ Core API\\n    participant DB as 🐘 Base de Datos\\n    U->>FE: 1. Inicia acción...\\n    FE->>BE: 2. Petición...\\n    BE->>DB: 3. Consulta...\\n    DB-->>BE: 4. Respuesta...\\n    BE-->>FE: 5. Confirmación...\\n    FE-->>U: 6. Vista actualizada",
+  "sequenceUml": "sequenceDiagram\\n    autonumber\\n    actor U as 👤 Usuario\\n    participant FE as 🖥️ Frontend Web\\n    participant BE as ⚡ Core API\\n    participant DB as 🐘 Base de Datos\\n    U->>FE: 1. Acción...\\n    FE->>BE: 2. Petición...\\n    BE->>DB: 3. Consulta...\\n    DB-->>BE: 4. Respuesta...\\n    BE-->>FE: 5. Confirmación...\\n    FE-->>U: 6. Vista actualizada",
   "stateMachine": "stateDiagram-v2\\n    [*] --> Borrador\\n    Borrador --> EnProceso\\n    EnProceso --> Completado\\n    Completado --> [*]",
   "database": [
     { "table": "nombre_tabla", "description": "Qué persiste", "columns": ["id (UUID)", "created_at (Timestamp)", "..."] }
   ],
   "suggestedActions": [
-    "Texto del botón 1 para el usuario (ej: Aprobar alcance y pasar a Historias)",
-    "Texto del botón 2 para el usuario",
-    "Texto del botón 3 para el usuario"
+    "Aprobar y avanzar a la siguiente etapa",
+    "Ajustar propuesta actual"
   ]
 }`
 
@@ -742,12 +1221,15 @@ Tu respuesta DEBE constar de dos partes:
   return {
     reply: cleanReply || openRouterResult.content,
     preview,
+    stage: preview.stage || activeStage,
+    impact: impact.hasImpact ? impact : null,
     tokens: {
       promptTokens: openRouterResult.usage.promptTokens,
       completionTokens: openRouterResult.usage.completionTokens,
       totalTokens: openRouterResult.usage.totalTokens,
       engine: `OpenRouter AI (${openRouterResult.model})`
     },
+    readyToAdvance: true,
     readyToScaffold: true
   }
 }

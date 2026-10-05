@@ -6,9 +6,10 @@ import net from 'net'
 import { fileURLToPath } from 'url'
 import { exec, execSync } from 'child_process'
 import { scanProject, scanProjectViews } from './scanner.js'
-import { scaffoldGenesis, processGenesisChat } from './genesis.js'
+import { scaffoldGenesis, processGenesisChat, analyzeImpact, persistGenesisStage } from './genesis.js'
 import { discoverFlowsWithAi } from './flows-ai.js'
 import { reverseEngineerProjectWithAi } from './reverse-engineer.js'
+import { normalizeProjectModel, calculateProjectProgress, normalizeBusinessRule, normalizeUserFlow, normalizeBusinessFlow, normalizeTechStack, normalizeEndpoint, normalizeApiContract, normalizeDatabaseTable, normalizeDatabaseRelationship } from './model-schema.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -336,6 +337,11 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
   const qaDir = path.join(sddDir, 'qa')
   const seqDir = path.join(sddDir, 'sequences')
   const uiDir = path.join(sddDir, 'ui-ux')
+  const productDir = path.join(sddDir, 'product')
+  const archDir = path.join(sddDir, 'architecture')
+  const apiDir = path.join(sddDir, 'api')
+  const execDir = path.join(sddDir, 'execution')
+  const govDir = path.join(sddDir, 'governance')
 
   const server = http.createServer(async (req, res) => {
     // CORS headers for local tools
@@ -389,10 +395,19 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
         const useCases = readJsonFile(path.join(reqDir, 'use-cases.json'), [])
         const rolesMatrix = readJsonFile(path.join(reqDir, 'roles-matrix.json'), {})
 
+        let userFlows = readJsonFile(path.join(flowsDir, 'user-flows.json'), [])
+        if (!Array.isArray(userFlows)) userFlows = []
+
+        let businessFlows = readJsonFile(path.join(flowsDir, 'business-flows.json'), [])
+        if (!Array.isArray(businessFlows)) businessFlows = []
+
         let flows = []
         if (fs.existsSync(flowsDir)) {
-          const files = fs.readdirSync(flowsDir).filter(f => f.endsWith('.json'))
+          const files = fs.readdirSync(flowsDir).filter(f => f.endsWith('.json') && f !== 'user-flows.json' && f !== 'business-flows.json')
           flows = files.map(f => readJsonFile(path.join(flowsDir, f))).filter(Boolean)
+        }
+        if (businessFlows.length === 0 && flows.length > 0) {
+          businessFlows = flows
         }
 
         let architecture = readJsonFile(path.join(sddDir, 'architecture.json'))
@@ -414,6 +429,7 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
           writeJsonFile(path.join(sddDir, 'architecture.json'), architecture)
         }
         const database = readJsonFile(path.join(dbDir, 'schema-erd.json'), {})
+        const dbRelationships = readJsonFile(path.join(dbDir, 'relationships.json'), [])
         const testPlan = readJsonFile(path.join(qaDir, 'test-plan.json'), {})
         // Carga y normalización de Secuencias UML vinculadas a Flujos
         let sequences = []
@@ -498,6 +514,49 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
 
         const isNewProject = !fs.existsSync(path.join(sddDir, 'project.json')) || userStories.length === 0
 
+        // Lectura de entidades v2
+        const vision = readJsonFile(path.join(productDir, 'vision.json'), null)
+        const productScope = readJsonFile(path.join(productDir, 'scope.json'), null)
+        const actors = readJsonFile(path.join(productDir, 'actors.json'), null)
+        const modules = readJsonFile(path.join(productDir, 'modules.json'), null)
+        const businessRules = readJsonFile(path.join(reqDir, 'business-rules.json'), [])
+        const stack = readJsonFile(path.join(archDir, 'stack.json'), null)
+        const endpoints = readJsonFile(path.join(apiDir, 'endpoints.json'), [])
+        const apiContracts = readJsonFile(path.join(apiDir, 'contracts.json'), [])
+        const execTasks = readJsonFile(path.join(execDir, 'tasks.json'), [])
+        const execPhases = readJsonFile(path.join(execDir, 'phases.json'), [])
+        const qualityGates = readJsonFile(path.join(govDir, 'quality-gates.json'), null)
+        const wireframes = readJsonFile(path.join(uiDir, 'wireframes.json'), [])
+        const uiComponents = readJsonFile(path.join(uiDir, 'components.json'), [])
+        const designSystem = readJsonFile(path.join(uiDir, 'design-system.json'), null)
+
+        // Normalización canónica del Project Model v2
+        const modelV2 = normalizeProjectModel({
+          project,
+          core: { problem, targetUsers, scopeBoundaries, successCriteria, risks, constitution },
+          product: { vision, scope: productScope, actors, modules },
+          requirements: { epics, userStories, businessRules },
+          flows: { userFlows, businessFlows },
+          architecture: {
+            topology: architecture,
+            stack
+          },
+          database: {
+            tables: Array.isArray(database.tables) ? database.tables : (Array.isArray(database) ? database : []),
+            relationships: Array.isArray(dbRelationships) && dbRelationships.length > 0 ? dbRelationships : (Array.isArray(database.relationships) ? database.relationships : [])
+          },
+          api: { endpoints, contracts: apiContracts },
+          sequences,
+          uiUx: { screens, components: uiComponents, wireframes, designSystem },
+          execution: { phases: execPhases, tasks: execTasks, activeTask },
+          governance: { qualityGates }
+        })
+
+        // Sincronizar stage y progress en project
+        project.stage = project.stage || modelV2.meta.stage
+        project.progress = typeof project.progress === 'number' ? project.progress : modelV2.meta.progress
+        project.completedStages = project.completedStages || modelV2.meta.completedStages
+
         const payload = {
           isNewProject,
           workspaceName: path.basename(projectRoot),
@@ -512,7 +571,9 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
             flowsSummary: flows.map(f => ({ id: f.id, name: f.name, priority: f.priority, progress: f.progress || 0 }))
           },
           architecture,
-          flows,
+          flows: businessFlows.length > 0 ? businessFlows : flows,
+          userFlows: modelV2.flows.userFlows,
+          businessFlows: modelV2.flows.businessFlows,
           requirements: { epics, userStories, useCases, rolesMatrix },
           database,
           testPlan,
@@ -520,7 +581,20 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
           stateMachines,
           uiUx: { screens },
           drift,
-          convergence: calculateConvergence(projectRoot, sddDir)
+          convergence: calculateConvergence(projectRoot, sddDir),
+          // Integración con Project Model v2
+          modelV2,
+          product: modelV2.product,
+          businessRules: modelV2.requirements.businessRules,
+          stack: modelV2.architecture.stack,
+          api: modelV2.api,
+          execution: modelV2.execution,
+          governance: modelV2.governance,
+          stageInfo: {
+            stage: modelV2.meta.stage,
+            progress: modelV2.meta.progress,
+            completedStages: modelV2.meta.completedStages
+          }
         }
 
         res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -696,6 +770,7 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
                 if (c) c.done = Boolean(body.done)
               }
               if (body.assignedTo) story.assignedTo = body.assignedTo
+              if (body.businessRuleIds !== undefined) story.businessRuleIds = Array.isArray(body.businessRuleIds) ? body.businessRuleIds : []
               if (body.status === 'done') {
                 story.status = 'done'
                 story.progress = 100
@@ -803,8 +878,317 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
             return
           }
 
+          // 2.8 Mutaciones del Project Model v2
+          if (body.product) {
+            if (body.product.vision) writeJsonFile(path.join(productDir, 'vision.json'), body.product.vision)
+            if (body.product.scope) writeJsonFile(path.join(productDir, 'scope.json'), body.product.scope)
+            if (body.product.actors) writeJsonFile(path.join(productDir, 'actors.json'), body.product.actors)
+            if (body.product.modules) writeJsonFile(path.join(productDir, 'modules.json'), body.product.modules)
+          }
+
+          // 2.8 Mutaciones atómicas de Entidades de Requisitos y Flujos
+          if (body.businessRule) {
+            const brFile = path.join(reqDir, 'business-rules.json')
+            let rules = readJsonFile(brFile, [])
+            if (!Array.isArray(rules)) rules = []
+            const normalized = normalizeBusinessRule(body.businessRule, rules.length)
+            const idx = rules.findIndex(r => r.id === normalized.id || (r.code && r.code === normalized.code))
+            if (idx !== -1) {
+              rules[idx] = { ...rules[idx], ...normalized }
+            } else {
+              rules.push(normalized)
+            }
+            writeJsonFile(brFile, rules)
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, updatedBusinessRule: normalized, businessRules: rules }))
+            return
+          }
+
+          if (body.deleteBusinessRuleId) {
+            const brFile = path.join(reqDir, 'business-rules.json')
+            let rules = readJsonFile(brFile, [])
+            if (Array.isArray(rules)) {
+              rules = rules.filter(r => r.id !== body.deleteBusinessRuleId && r.code !== body.deleteBusinessRuleId)
+              writeJsonFile(brFile, rules)
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, deletedBusinessRuleId: body.deleteBusinessRuleId, businessRules: rules }))
+            return
+          }
+
+          if (body.userFlow) {
+            const ufFile = path.join(flowsDir, 'user-flows.json')
+            let ufs = readJsonFile(ufFile, [])
+            if (!Array.isArray(ufs)) ufs = []
+            const normalized = normalizeUserFlow(body.userFlow, ufs.length)
+            const idx = ufs.findIndex(u => u.id === normalized.id)
+            if (idx !== -1) {
+              ufs[idx] = { ...ufs[idx], ...normalized }
+            } else {
+              ufs.push(normalized)
+            }
+            writeJsonFile(ufFile, ufs)
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, updatedUserFlow: normalized, userFlows: ufs }))
+            return
+          }
+
+          if (body.deleteUserFlowId) {
+            const ufFile = path.join(flowsDir, 'user-flows.json')
+            let ufs = readJsonFile(ufFile, [])
+            if (Array.isArray(ufs)) {
+              ufs = ufs.filter(u => u.id !== body.deleteUserFlowId)
+              writeJsonFile(ufFile, ufs)
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, deletedUserFlowId: body.deleteUserFlowId, userFlows: ufs }))
+            return
+          }
+
+          if (body.businessFlow) {
+            const bfFile = path.join(flowsDir, 'business-flows.json')
+            let bfs = readJsonFile(bfFile, [])
+            if (!Array.isArray(bfs)) bfs = []
+            const normalized = normalizeBusinessFlow(body.businessFlow, bfs.length)
+            const idx = bfs.findIndex(b => b.id === normalized.id)
+            if (idx !== -1) {
+              bfs[idx] = { ...bfs[idx], ...normalized }
+            } else {
+              bfs.push(normalized)
+            }
+            writeJsonFile(bfFile, bfs)
+            writeJsonFile(path.join(flowsDir, `${normalized.id}.json`), normalized)
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, updatedBusinessFlow: normalized, businessFlows: bfs }))
+            return
+          }
+
+          if (body.deleteBusinessFlowId) {
+            const bfFile = path.join(flowsDir, 'business-flows.json')
+            let bfs = readJsonFile(bfFile, [])
+            if (Array.isArray(bfs)) {
+              bfs = bfs.filter(b => b.id !== body.deleteBusinessFlowId)
+              writeJsonFile(bfFile, bfs)
+            }
+            const indFile = path.join(flowsDir, `${body.deleteBusinessFlowId}.json`)
+            if (fs.existsSync(indFile)) {
+              try { fs.unlinkSync(indFile) } catch {}
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, deletedBusinessFlowId: body.deleteBusinessFlowId, businessFlows: bfs }))
+            return
+          }
+
+          if (body.epic) {
+            const epicFile = path.join(reqDir, 'epics.json')
+            let epics = readJsonFile(epicFile, [])
+            if (!Array.isArray(epics)) epics = []
+            const epic = {
+              id: body.epic.id || `EPIC-${String(epics.length + 1).padStart(2, '0')}`,
+              title: body.epic.title || body.epic.name || 'Nueva Épica',
+              description: body.epic.description || '',
+              moduleId: body.epic.moduleId || 'mod-1',
+              priority: body.epic.priority || 'P1',
+              status: body.epic.status || 'planned',
+              storyIds: Array.isArray(body.epic.storyIds) ? body.epic.storyIds : []
+            }
+            const idx = epics.findIndex(e => e.id === epic.id)
+            if (idx !== -1) {
+              epics[idx] = { ...epics[idx], ...epic }
+            } else {
+              epics.push(epic)
+            }
+            writeJsonFile(epicFile, epics)
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, updatedEpic: epic, epics }))
+            return
+          }
+
+          if (body.deleteEpicId) {
+            const epicFile = path.join(reqDir, 'epics.json')
+            let epics = readJsonFile(epicFile, [])
+            if (Array.isArray(epics)) {
+              epics = epics.filter(e => e.id !== body.deleteEpicId)
+              writeJsonFile(epicFile, epics)
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, deletedEpicId: body.deleteEpicId, epics }))
+            return
+          }
+
+          if (body.flows) {
+            if (Array.isArray(body.flows.userFlows)) {
+              writeJsonFile(path.join(flowsDir, 'user-flows.json'), body.flows.userFlows.map(normalizeUserFlow))
+            }
+            if (Array.isArray(body.flows.businessFlows)) {
+              writeJsonFile(path.join(flowsDir, 'business-flows.json'), body.flows.businessFlows.map(normalizeBusinessFlow))
+            }
+          }
+
+          if (body.businessRules) {
+            writeJsonFile(path.join(reqDir, 'business-rules.json'), body.businessRules.map(normalizeBusinessRule))
+          }
+
+          if (body.stack) {
+            const stackFile = path.join(archDir, 'stack.json')
+            const existingStack = readJsonFile(stackFile, {})
+            const updated = normalizeTechStack({ ...existingStack, ...body.stack })
+            writeJsonFile(stackFile, updated)
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, updatedStack: updated, stack: updated }))
+            return
+          }
+
+          if (body.endpoint) {
+            const epFile = path.join(apiDir, 'endpoints.json')
+            let endpoints = readJsonFile(epFile, [])
+            if (!Array.isArray(endpoints)) endpoints = []
+            const normalized = normalizeEndpoint(body.endpoint, endpoints.length)
+            const idx = endpoints.findIndex(e => e.id === normalized.id || (e.method === normalized.method && e.path === normalized.path))
+            if (idx !== -1) {
+              endpoints[idx] = { ...endpoints[idx], ...normalized }
+            } else {
+              endpoints.push(normalized)
+            }
+            writeJsonFile(epFile, endpoints)
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, updatedEndpoint: normalized, endpoints }))
+            return
+          }
+
+          if (body.deleteEndpointId) {
+            const epFile = path.join(apiDir, 'endpoints.json')
+            let endpoints = readJsonFile(epFile, [])
+            if (Array.isArray(endpoints)) {
+              endpoints = endpoints.filter(e => e.id !== body.deleteEndpointId)
+              writeJsonFile(epFile, endpoints)
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, deletedEndpointId: body.deleteEndpointId, endpoints }))
+            return
+          }
+
+          if (body.contract) {
+            const cFile = path.join(apiDir, 'contracts.json')
+            let contracts = readJsonFile(cFile, [])
+            if (!Array.isArray(contracts)) contracts = []
+            const normalized = normalizeApiContract(body.contract, contracts.length)
+            const idx = contracts.findIndex(c => c.id === normalized.id || c.name === normalized.name)
+            if (idx !== -1) {
+              contracts[idx] = { ...contracts[idx], ...normalized }
+            } else {
+              contracts.push(normalized)
+            }
+            writeJsonFile(cFile, contracts)
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, updatedContract: normalized, contracts }))
+            return
+          }
+
+          if (body.deleteContractId) {
+            const cFile = path.join(apiDir, 'contracts.json')
+            let contracts = readJsonFile(cFile, [])
+            if (Array.isArray(contracts)) {
+              contracts = contracts.filter(c => c.id !== body.deleteContractId && c.name !== body.deleteContractId)
+              writeJsonFile(cFile, contracts)
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, deletedContractId: body.deleteContractId, contracts }))
+            return
+          }
+
+          if (body.table) {
+            const schemaFile = path.join(dbDir, 'schema-erd.json')
+            let erd = readJsonFile(schemaFile, { tables: [] })
+            let tables = Array.isArray(erd.tables) ? erd.tables : (Array.isArray(erd) ? erd : [])
+            const normalized = normalizeDatabaseTable(body.table, tables.length)
+            const idx = tables.findIndex(t => t.id === normalized.id || t.table === normalized.table)
+            if (idx !== -1) {
+              tables[idx] = { ...tables[idx], ...normalized }
+            } else {
+              tables.push(normalized)
+            }
+            if (Array.isArray(erd)) erd = tables
+            else erd.tables = tables
+            writeJsonFile(schemaFile, erd)
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, updatedTable: normalized, tables }))
+            return
+          }
+
+          if (body.deleteTableId) {
+            const schemaFile = path.join(dbDir, 'schema-erd.json')
+            let erd = readJsonFile(schemaFile, { tables: [] })
+            let tables = Array.isArray(erd.tables) ? erd.tables : (Array.isArray(erd) ? erd : [])
+            tables = tables.filter(t => t.id !== body.deleteTableId && t.table !== body.deleteTableId)
+            if (Array.isArray(erd)) erd = tables
+            else erd.tables = tables
+            writeJsonFile(schemaFile, erd)
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, deletedTableId: body.deleteTableId, tables }))
+            return
+          }
+
+          if (body.relationship) {
+            const relFile = path.join(dbDir, 'relationships.json')
+            let rels = readJsonFile(relFile, [])
+            if (!Array.isArray(rels)) rels = []
+            const normalized = normalizeDatabaseRelationship(body.relationship, rels.length)
+            const idx = rels.findIndex(r => r.id === normalized.id || (r.fromTable === normalized.fromTable && r.toTable === normalized.toTable))
+            if (idx !== -1) {
+              rels[idx] = { ...rels[idx], ...normalized }
+            } else {
+              rels.push(normalized)
+            }
+            writeJsonFile(relFile, rels)
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, updatedRelationship: normalized, relationships: rels }))
+            return
+          }
+
+          if (body.deleteRelationshipId) {
+            const relFile = path.join(dbDir, 'relationships.json')
+            let rels = readJsonFile(relFile, [])
+            if (Array.isArray(rels)) {
+              rels = rels.filter(r => r.id !== body.deleteRelationshipId)
+              writeJsonFile(relFile, rels)
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, deletedRelationshipId: body.deleteRelationshipId, relationships: rels }))
+            return
+          }
+
+          if (body.api) {
+            if (body.api.endpoints) writeJsonFile(path.join(apiDir, 'endpoints.json'), body.api.endpoints.map(normalizeEndpoint))
+            if (body.api.contracts) writeJsonFile(path.join(apiDir, 'contracts.json'), body.api.contracts.map(normalizeApiContract))
+          }
+
+          if (body.database) {
+            if (body.database.tables) writeJsonFile(path.join(dbDir, 'schema-erd.json'), { tables: body.database.tables.map(normalizeDatabaseTable) })
+            if (body.database.relationships) writeJsonFile(path.join(dbDir, 'relationships.json'), body.database.relationships.map(normalizeDatabaseRelationship))
+          }
+
+          if (body.execution) {
+            if (body.execution.tasks) writeJsonFile(path.join(execDir, 'tasks.json'), body.execution.tasks)
+            if (body.execution.phases) writeJsonFile(path.join(execDir, 'phases.json'), body.execution.phases)
+          }
+
+          if (body.governance?.qualityGates) {
+            writeJsonFile(path.join(govDir, 'quality-gates.json'), body.governance.qualityGates)
+          }
+
+          if (body.stage || body.progress !== undefined) {
+            const projFile = path.join(sddDir, 'project.json')
+            const proj = readJsonFile(projFile, {})
+            if (body.stage) proj.stage = body.stage
+            if (body.progress !== undefined) proj.progress = body.progress
+            if (body.completedStages) proj.completedStages = body.completedStages
+            proj.lastUpdated = new Date().toISOString()
+            writeJsonFile(projFile, proj)
+          }
+
           res.writeHead(200, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ success: true, message: 'Operación procesada' }))
+          res.end(JSON.stringify({ success: true, message: 'Operación procesada con éxito en Project Model v2' }))
         } catch (err) {
           res.writeHead(500, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ error: err.message }))
@@ -882,7 +1266,8 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
             priority = 'P0',
             scopeFiles = [],
             acceptanceCriteria = [],
-            epicId = 'EPIC-01'
+            epicId = 'EPIC-01',
+            businessRuleIds = []
           } = JSON.parse(bodyData || '{}')
 
           if (!title || !title.trim()) {
@@ -944,6 +1329,7 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
             origin: 'workbench',
             createdAt: new Date().toISOString(),
             scopeFiles: Array.isArray(scopeFiles) && scopeFiles.length > 0 ? scopeFiles : ['src/**', 'app/**'],
+            businessRuleIds: Array.isArray(businessRuleIds) ? businessRuleIds : [],
             acceptanceCriteria: criteria
           }
 
@@ -1150,16 +1536,53 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
       req.on('data', chunk => { bodyData += chunk })
       req.on('end', async () => {
         try {
-          const { messages, currentPreview, apiKey, model } = JSON.parse(bodyData || '{}')
+          const { messages, currentPreview, apiKey, model, stage } = JSON.parse(bodyData || '{}')
           const orConfig = getOpenRouterConfig(projectRoot)
           const effectiveKey = apiKey || orConfig.apiKey
           const effectiveModel = model || orConfig.defaultModel
           const chatResult = await processGenesisChat(messages, currentPreview, {
             apiKey: effectiveKey,
-            model: effectiveModel
+            model: effectiveModel,
+            stage
           })
           res.writeHead(200, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ success: true, ...chatResult }))
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: err.message }))
+        }
+      })
+      return
+    }
+
+    // 3.32 Genesis Stage Advance POST /api/genesis/stage-advance
+    if (url.pathname === '/api/genesis/stage-advance' && req.method === 'POST') {
+      let bodyData = ''
+      req.on('data', chunk => { bodyData += chunk })
+      req.on('end', () => {
+        try {
+          const { stage, stageData } = JSON.parse(bodyData || '{}')
+          const result = persistGenesisStage(projectRoot, stage, stageData)
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: true, ...result }))
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: err.message }))
+        }
+      })
+      return
+    }
+
+    // 3.33 Genesis Impact Analysis POST /api/genesis/impact-analysis
+    if (url.pathname === '/api/genesis/impact-analysis' && req.method === 'POST') {
+      let bodyData = ''
+      req.on('data', chunk => { bodyData += chunk })
+      req.on('end', () => {
+        try {
+          const { message, currentPreview } = JSON.parse(bodyData || '{}')
+          const impact = analyzeImpact(message, currentPreview)
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: true, impact }))
         } catch (err) {
           res.writeHead(500, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ error: err.message }))

@@ -259,6 +259,15 @@ export function deleteChatSession(event, id) {
   }
 }
 
+export function clearAllChatSessions() {
+  if (confirm('¿Deseas vaciar el historial de chats de este proyecto?')) {
+    saveStoredSessions([]);
+    // También limpiar clave legacy si existe
+    try { localStorage.removeItem('sdd_chat_history_v2'); } catch {}
+    startNewChatProject();
+  }
+}
+
 export function startNewChatProject() {
   state.activeSessionId = null;
   state.chatMessages = [];

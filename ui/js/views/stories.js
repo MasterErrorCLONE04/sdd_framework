@@ -176,6 +176,24 @@ export function renderStories() {
         </div>
       </div>
 
+      ${Array.isArray(s.businessRuleIds) && s.businessRuleIds.length > 0 ? `
+        <!-- Business Rules Linked -->
+        <div class="pt-3 border-t border-zinc-100 space-y-1.5">
+          <div class="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-700 flex items-center gap-1.5">
+            <i data-lucide="scale" class="w-3.5 h-3.5 text-amber-600"></i>
+            <span>Reglas de Negocio Vinculadas (BR):</span>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            ${s.businessRuleIds.map(brId => `
+              <span class="inline-flex items-center gap-1 text-[11px] font-mono bg-amber-50 text-amber-800 px-2 py-0.5 rounded-lg border border-amber-200 font-bold">
+                <i data-lucide="tag" class="w-3 h-3 text-amber-600"></i>
+                <span>${escapeHtml(brId)}</span>
+              </span>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+
       <!-- Scope Protection Files -->
       <div class="pt-3 border-t border-zinc-100 space-y-2">
         <div class="flex items-center justify-between text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400">

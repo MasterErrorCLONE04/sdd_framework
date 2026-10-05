@@ -50,11 +50,17 @@ export const state = {
 };
 
 // Storage Keys & Session Management
-export const CHAT_STORAGE_KEY = 'sdd_chat_history_v2';
+export function getChatStorageKey() {
+  const ws = state.appState?.workspacePath || state.appState?.workspaceName;
+  if (!ws) return 'sdd_chat_history_v2';
+  const cleanKey = ws.replace(/[^a-zA-Z0-9_-]/g, '_');
+  return `sdd_chat_history_${cleanKey}`;
+}
 
 export function getStoredSessions() {
   try {
-    const raw = localStorage.getItem(CHAT_STORAGE_KEY);
+    const key = getChatStorageKey();
+    const raw = localStorage.getItem(key);
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
@@ -63,26 +69,37 @@ export function getStoredSessions() {
 
 export function saveStoredSessions(sessions) {
   try {
-    localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(sessions));
+    const key = getChatStorageKey();
+    localStorage.setItem(key, JSON.stringify(sessions));
   } catch (e) {
     console.error('Error saving chat sessions:', e);
   }
 }
 
 export function ensureDefaultSession(project, genesisTask) {
+  const storiesCount = state.appState?.requirements?.userStories?.length || 0;
+  const isNew = Boolean(state.appState?.isNewProject) || (storiesCount === 0 && !genesisTask);
+
+  // En proyectos nuevos sin historias ni tarea génesis, mantener historial limpio sin sesiones fantasma
+  if (isNew) {
+    return getStoredSessions();
+  }
+
   let sessions = getStoredSessions();
-  const projName = project?.name || 'FlashCheckout';
-  const promptText = genesisTask?.prompt || `Construir ${projName}: Plataforma de software gobernada por especificaciones SDD y directivas de control de alcance.`;
+  const projName = project?.name || state.appState?.workspaceName;
+  if (!projName) return sessions;
+
+  const promptText = genesisTask?.prompt || `Proyecto ${projName}: Especificación SDD gobernada.`;
 
   const hasMatch = sessions.some(s => s.title === projName || (genesisTask && s.prompt === genesisTask.prompt));
-  if (!hasMatch) {
+  if (!hasMatch && (storiesCount > 0 || genesisTask)) {
     const defaultSession = {
       id: 'session_' + Date.now(),
       title: projName,
       prompt: promptText,
-      status: (state.appState?.requirements?.userStories?.length > 0) ? 'completed' : (genesisTask?.status || 'completed'),
+      status: (storiesCount > 0) ? 'completed' : (genesisTask?.status || 'completed'),
       createdAt: genesisTask?.createdAt || new Date().toISOString(),
-      storyCount: state.appState?.requirements?.userStories?.length || 8
+      storyCount: storiesCount
     };
     sessions.unshift(defaultSession);
     saveStoredSessions(sessions);

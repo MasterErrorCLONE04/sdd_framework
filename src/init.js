@@ -12,17 +12,22 @@ export function initializeSdd(projectRoot = process.cwd(), options = {}) {
     scanned = scanProject(projectRoot)
   }
 
-  // Create folder structure
+  // Create folder structure v2
   const subdirs = [
     'core',
-    'discovery',
+    'product',
     'requirements',
     'requirements/stories',
     'flows',
+    'architecture',
     'database',
-    'qa',
+    'api',
     'sequences',
-    'ui-ux'
+    'ui-ux',
+    'execution',
+    'governance',
+    'discovery',
+    'qa'
   ]
 
   for (const sub of subdirs) {
@@ -32,7 +37,7 @@ export function initializeSdd(projectRoot = process.cwd(), options = {}) {
     }
   }
 
-  // 1. project.json
+  // 1. project.json (con tracking de etapas de Génesis)
   const projectJsonPath = path.join(sddDir, 'project.json')
   if (!fs.existsSync(projectJsonPath)) {
     const projectName = path.basename(projectRoot) || 'New Project'
@@ -42,6 +47,10 @@ export function initializeSdd(projectRoot = process.cwd(), options = {}) {
       purpose: 'comercial',
       depth: 'serio',
       version: '1.0.0',
+      status: 'planning',
+      stage: 'discovery',
+      progress: 10,
+      completedStages: [],
       activeSprint: 'Sprint 1',
       lastUpdated: new Date().toISOString(),
       qualityGates: {
@@ -157,6 +166,136 @@ export function initializeSdd(projectRoot = process.cwd(), options = {}) {
   if (!fs.existsSync(screensPath)) {
     const screens = scanned?.detectedScreens || scanProjectViews(projectRoot)
     fs.writeFileSync(screensPath, JSON.stringify(screens, null, 2), 'utf-8')
+  }
+
+  // 4.6 product/ (vision.json, scope.json, actors.json, modules.json)
+  const visionPath = path.join(sddDir, 'product', 'vision.json')
+  if (!fs.existsSync(visionPath)) {
+    fs.writeFileSync(visionPath, JSON.stringify({
+      problem: '',
+      targetAudience: '',
+      valueProposition: '',
+      coreGoals: [],
+      successMetrics: []
+    }, null, 2), 'utf-8')
+  }
+
+  const productScopePath = path.join(sddDir, 'product', 'scope.json')
+  if (!fs.existsSync(productScopePath)) {
+    fs.writeFileSync(productScopePath, JSON.stringify({
+      inScopeV1: ['Funcionalidad mínima viable'],
+      explicitNonGoals: ['App móvil nativa en V1', 'Arquitectura distribuida innecesaria inicial'],
+      futureBacklog: []
+    }, null, 2), 'utf-8')
+  }
+
+  const actorsPath = path.join(sddDir, 'product', 'actors.json')
+  if (!fs.existsSync(actorsPath)) {
+    fs.writeFileSync(actorsPath, JSON.stringify([
+      { id: 'actor-user', name: 'Usuario Principal', role: 'user', description: 'Usuario que interactúa con la aplicación.' }
+    ], null, 2), 'utf-8')
+  }
+
+  const modulesPath = path.join(sddDir, 'product', 'modules.json')
+  if (!fs.existsSync(modulesPath)) {
+    fs.writeFileSync(modulesPath, JSON.stringify([], null, 2), 'utf-8')
+  }
+
+  // 4.7 requirements/business-rules.json & epics.json
+  const brPath = path.join(sddDir, 'requirements', 'business-rules.json')
+  if (!fs.existsSync(brPath)) {
+    fs.writeFileSync(brPath, JSON.stringify([], null, 2), 'utf-8')
+  }
+
+  const epicsPath = path.join(sddDir, 'requirements', 'epics.json')
+  if (!fs.existsSync(epicsPath)) {
+    fs.writeFileSync(epicsPath, JSON.stringify([
+      { id: 'EPIC-01', title: 'Fundación & MVP', description: 'Capacidades centrales de la primera versión', moduleId: 'mod-1', priority: 'P0', status: 'planned', storyIds: [] }
+    ], null, 2), 'utf-8')
+  }
+
+  // 4.75 flows/ (user-flows.json, business-flows.json)
+  const userFlowsPath = path.join(sddDir, 'flows', 'user-flows.json')
+  if (!fs.existsSync(userFlowsPath)) {
+    fs.writeFileSync(userFlowsPath, JSON.stringify([], null, 2), 'utf-8')
+  }
+
+  const businessFlowsPath = path.join(sddDir, 'flows', 'business-flows.json')
+  if (!fs.existsSync(businessFlowsPath)) {
+    fs.writeFileSync(businessFlowsPath, JSON.stringify([], null, 2), 'utf-8')
+  }
+
+  // 4.8 architecture/stack.json
+  const stackPath = path.join(sddDir, 'architecture', 'stack.json')
+  if (!fs.existsSync(stackPath)) {
+    fs.writeFileSync(stackPath, JSON.stringify({
+      frontend: { framework: scanned?.framework || 'HTML5 / Web', language: scanned?.language || 'JavaScript', styling: 'Vanilla CSS / Tailwind' },
+      backend: { framework: scanned?.framework || 'Node.js', runtime: 'Node >= 18', architecturePattern: 'Layered Services' },
+      database: { engine: scanned?.database || 'SQLite / PostgreSQL', orm: 'Prisma / SQL' },
+      auth: { strategy: 'JWT / Session Bearer', rbac: true },
+      deployment: { target: 'Local / Docker', ciCd: 'GitHub Actions' }
+    }, null, 2), 'utf-8')
+  }
+
+  // 4.9 api/endpoints.json & api/contracts.json
+  const apiPath = path.join(sddDir, 'api', 'endpoints.json')
+  if (!fs.existsSync(apiPath)) {
+    const detectedEndpoints = scanned?.detectedRoutes ? scanned.detectedRoutes.map((r, i) => ({
+      id: `api-${i + 1}`,
+      method: r.method || 'GET',
+      path: r.path || r.route,
+      summary: `Ruta detectada en ${r.filePath || 'código fuente'}`
+    })) : []
+    fs.writeFileSync(apiPath, JSON.stringify(detectedEndpoints, null, 2), 'utf-8')
+  }
+
+  const contractsPath = path.join(sddDir, 'api', 'contracts.json')
+  if (!fs.existsSync(contractsPath)) {
+    fs.writeFileSync(contractsPath, JSON.stringify([], null, 2), 'utf-8')
+  }
+
+  // 4.95 database/ (schema-erd.json, relationships.json)
+  const dbSchemaPath = path.join(sddDir, 'database', 'schema-erd.json')
+  if (!fs.existsSync(dbSchemaPath)) {
+    fs.writeFileSync(dbSchemaPath, JSON.stringify({ tables: [], relationships: [] }, null, 2), 'utf-8')
+  }
+
+  const dbRelsPath = path.join(sddDir, 'database', 'relationships.json')
+  if (!fs.existsSync(dbRelsPath)) {
+    fs.writeFileSync(dbRelsPath, JSON.stringify([], null, 2), 'utf-8')
+  }
+
+  // 4.96 sequences/sequences.json
+  const seqPath = path.join(sddDir, 'sequences', 'sequences.json')
+  if (!fs.existsSync(seqPath)) {
+    fs.writeFileSync(seqPath, JSON.stringify([], null, 2), 'utf-8')
+  }
+
+  // 4.10 execution/ (tasks.json, phases.json)
+  const execPhasesPath = path.join(sddDir, 'execution', 'phases.json')
+  if (!fs.existsSync(execPhasesPath)) {
+    fs.writeFileSync(execPhasesPath, JSON.stringify([
+      { id: 'phase-1', name: 'Fase 1: Configuración & Modelos', order: 1, status: 'planned', taskIds: [] },
+      { id: 'phase-2', name: 'Fase 2: Lógica Central & API', order: 2, status: 'planned', taskIds: [] },
+      { id: 'phase-3', name: 'Fase 3: Interfaz & UX', order: 3, status: 'planned', taskIds: [] }
+    ], null, 2), 'utf-8')
+  }
+
+  const execTasksPath = path.join(sddDir, 'execution', 'tasks.json')
+  if (!fs.existsSync(execTasksPath)) {
+    fs.writeFileSync(execTasksPath, JSON.stringify([], null, 2), 'utf-8')
+  }
+
+  // 4.11 governance/quality-gates.json
+  const gatesPath = path.join(sddDir, 'governance', 'quality-gates.json')
+  if (!fs.existsSync(gatesPath)) {
+    fs.writeFileSync(gatesPath, JSON.stringify([
+      { id: 'gate-problem', name: 'Definición de Problema & Valor', stage: 'discovery', status: 'pending' },
+      { id: 'gate-scope', name: 'Límites de Alcance & Non-Goals', stage: 'product', status: 'pending' },
+      { id: 'gate-requirements', name: 'Historias con Criterios Gherkin', stage: 'requirements', status: 'pending' },
+      { id: 'gate-architecture', name: 'Topología & Base de Datos', stage: 'architecture', status: 'pending' },
+      { id: 'gate-tasks', name: 'Plan de Tareas con Scope Shield', stage: 'execution', status: 'pending' }
+    ], null, 2), 'utf-8')
   }
 
   // 5. AGENTS.md rulebook

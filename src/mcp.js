@@ -92,7 +92,8 @@ export function startMcpServer(projectRoot = process.cwd()) {
       inputSchema: {
         type: 'object',
         properties: {}
-         },
+      }
+    },
     {
       name: 'sdd_complete_genesis_task',
       description: 'Marca la orden de génesis (.sdd/genesis_task.json) como completada tras haber escrito los archivos .sdd/ y AGENTS.md, indicando a la cabina web que abra la vista en vivo de 12 perspectivas.',
@@ -110,6 +111,76 @@ export function startMcpServer(projectRoot = process.cwd()) {
         type: 'object',
         properties: {}
       }
+    },
+    {
+      name: 'sdd_get_flows',
+      description: 'Devuelve los flujos bifurcados del sistema: User Flows (recorridos cognitivos de pantallas del usuario) y Business Flows (pipelines transaccionales del backend con nodos y dependencias).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          type: {
+            type: 'string',
+            enum: ['all', 'user', 'business'],
+            description: 'Filtro por tipo de flujo: "all" (ambos), "user" (rutas de usuario) o "business" (pipelines transaccionales).'
+          },
+          flowId: {
+            type: 'string',
+            description: 'ID opcional del flujo a consultar (ej: uf-01 o bf-01 o 01-flujo-principal).'
+          }
+        }
+      }
+    },
+    {
+      name: 'sdd_get_business_rules',
+      description: 'Devuelve las Reglas de Negocio transversales del sistema (BR-001, etc.) y su mapeo con historias de usuario y servicios.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          category: {
+            type: 'string',
+            description: 'Filtrar por categoría (ej: "Business Logic", "Security", "Validation")'
+          },
+          enforcedAt: {
+            type: 'string',
+            enum: ['api', 'ui', 'db'],
+            description: 'Filtrar por capa de ejecución ("api", "ui", "db")'
+          },
+          storyId: {
+            type: 'string',
+            description: 'Filtrar por ID de historia de usuario vinculada (ej: US-001)'
+          }
+        }
+      }
+    },
+    {
+      name: 'sdd_get_api_contracts',
+      description: 'Devuelve la especificación de contratos de API: endpoints (método, ruta, actor, DTOs de request/response y reglas vinculadas) y modelos de datos DTO.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Filtro opcional por ruta (ej: /api/v1/users)' },
+          method: { type: 'string', description: 'Filtro opcional por método HTTP (GET, POST, etc.)' },
+          actor: { type: 'string', description: 'Filtro opcional por rol de usuario o actor' }
+        }
+      }
+    },
+    {
+      name: 'sdd_get_database_schema',
+      description: 'Devuelve el modelo entidad-relación (ERD) de base de datos: tablas con sus columnas, tipos, PK, FK y relaciones 1:1, 1:N o N:M.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          table: { type: 'string', description: 'Nombre opcional de tabla para filtrar' }
+        }
+      }
+    },
+    {
+      name: 'sdd_get_tech_stack',
+      description: 'Devuelve el stack tecnológico formal del proyecto: Frontend, Backend, Base de Datos, Autenticación, ORM y Despliegue.',
+      inputSchema: {
+        type: 'object',
+        properties: {}
+      }
     }
   ]
 
@@ -122,6 +193,11 @@ export function startMcpServer(projectRoot = process.cwd()) {
         const targetUsers = readJson(path.join(coreDir, 'target-user.json'), {})
         const constitution = readJson(path.join(coreDir, 'constitution.json'), { principles: [] })
 
+        // Compatibilidad con Project Model v2
+        const vision = readJson(path.join(sddDir, 'product', 'vision.json'), {})
+        const scope = readJson(path.join(sddDir, 'product', 'scope.json'), {})
+        const stack = readJson(path.join(sddDir, 'architecture', 'stack.json'), {})
+
         return {
           content: [
             {
@@ -131,14 +207,165 @@ export function startMcpServer(projectRoot = process.cwd()) {
                   name: project.name,
                   purpose: project.purpose,
                   depth: project.depth,
+                  stage: project.stage || 'discovery',
+                  progress: project.progress || 10,
+                  completedStages: project.completedStages || [],
                   qualityGates: project.qualityGates
                 },
                 constitution: constitution.principles || [],
-                problem: problem.statement || problem.summary,
-                explicitNonGoals: boundaries.explicitNonGoals || [],
-                inScopeV1: boundaries.inScopeV1 || [],
-                targetUsers: targetUsers.personas || []
+                problem: vision.problem || problem.statement || problem.summary || '',
+                targetUsers: vision.targetAudience || targetUsers.personas || [],
+                explicitNonGoals: scope.explicitNonGoals || boundaries.explicitNonGoals || [],
+                inScopeV1: scope.inScopeV1 || boundaries.inScopeV1 || [],
+                techStack: stack || {}
               }, null, 2)
+            }
+          ]
+        }
+      }
+
+      case 'sdd_get_flows': {
+        const flowsDir = path.join(sddDir, 'flows')
+        const filterType = args?.type || 'all'
+        let userFlows = readJson(path.join(flowsDir, 'user-flows.json'), [])
+        if (!Array.isArray(userFlows)) userFlows = []
+
+        let businessFlows = readJson(path.join(flowsDir, 'business-flows.json'), [])
+        if (!Array.isArray(businessFlows)) businessFlows = []
+
+        if (businessFlows.length === 0 && fs.existsSync(flowsDir)) {
+          const files = fs.readdirSync(flowsDir).filter(f => f.endsWith('.json') && f !== 'user-flows.json' && f !== 'business-flows.json')
+          businessFlows = files.map(f => readJson(path.join(flowsDir, f))).filter(Boolean)
+        }
+
+        if (args?.flowId) {
+          const uMatch = userFlows.find(f => f.id === args.flowId)
+          const bMatch = businessFlows.find(f => f.id === args.flowId)
+          const match = uMatch ? { type: 'userFlow', flow: uMatch } : (bMatch ? { type: 'businessFlow', flow: bMatch } : null)
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(match || { error: `Flujo "${args.flowId}" no encontrado en .sdd/flows/` }, null, 2)
+              }
+            ]
+          }
+        }
+
+        const result = {}
+        if (filterType === 'all' || filterType === 'user') {
+          result.userFlows = userFlows
+        }
+        if (filterType === 'all' || filterType === 'business') {
+          result.businessFlows = businessFlows
+        }
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2)
+            }
+          ]
+        }
+      }
+
+      case 'sdd_get_business_rules': {
+        let rules = readJson(path.join(reqDir, 'business-rules.json'), [])
+        if (!Array.isArray(rules)) rules = []
+
+        if (args?.category) {
+          rules = rules.filter(r => r.category && r.category.toLowerCase().includes(args.category.toLowerCase()))
+        }
+        if (args?.enforcedAt) {
+          rules = rules.filter(r => Array.isArray(r.enforcedAt) && r.enforcedAt.includes(args.enforcedAt))
+        }
+        if (args?.storyId) {
+          rules = rules.filter(r => Array.isArray(r.relatedStories) && r.relatedStories.includes(args.storyId))
+        }
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                count: rules.length,
+                businessRules: rules
+              }, null, 2)
+            }
+          ]
+        }
+      }
+
+      case 'sdd_get_api_contracts': {
+        const apiDir = path.join(sddDir, 'api')
+        let endpoints = readJson(path.join(apiDir, 'endpoints.json'), [])
+        let contracts = readJson(path.join(apiDir, 'contracts.json'), [])
+
+        if (args?.method) {
+          endpoints = endpoints.filter(e => (e.method || '').toUpperCase() === args.method.toUpperCase())
+        }
+        if (args?.path) {
+          endpoints = endpoints.filter(e => (e.path || '').toLowerCase().includes(args.path.toLowerCase()))
+        }
+        if (args?.actor) {
+          endpoints = endpoints.filter(e => (e.actor || '').toLowerCase().includes(args.actor.toLowerCase()))
+        }
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                endpointsCount: endpoints.length,
+                endpoints,
+                contractsCount: contracts.length,
+                contracts
+              }, null, 2)
+            }
+          ]
+        }
+      }
+
+      case 'sdd_get_database_schema': {
+        const dbDir = path.join(sddDir, 'database')
+        const erd = readJson(path.join(dbDir, 'schema-erd.json'), { tables: [] })
+        let tables = Array.isArray(erd.tables) ? erd.tables : (Array.isArray(erd) ? erd : [])
+        let relationships = readJson(path.join(dbDir, 'relationships.json'), [])
+        if ((!Array.isArray(relationships) || relationships.length === 0) && erd.relationships) {
+          relationships = erd.relationships
+        }
+
+        if (args?.table) {
+          tables = tables.filter(t => (t.table || t.name || '').toLowerCase() === args.table.toLowerCase())
+          relationships = relationships.filter(r => 
+            (r.fromTable || '').toLowerCase() === args.table.toLowerCase() ||
+            (r.toTable || '').toLowerCase() === args.table.toLowerCase()
+          )
+        }
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                tablesCount: tables.length,
+                tables,
+                relationshipsCount: relationships.length,
+                relationships
+              }, null, 2)
+            }
+          ]
+        }
+      }
+
+      case 'sdd_get_tech_stack': {
+        const stack = readJson(path.join(sddDir, 'architecture', 'stack.json'), {})
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(stack, null, 2)
             }
           ]
         }
