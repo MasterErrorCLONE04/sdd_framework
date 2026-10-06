@@ -9,7 +9,8 @@ import { scanProject, scanProjectViews } from './scanner.js'
 import { scaffoldGenesis, processGenesisChat, analyzeImpact, persistGenesisStage } from './genesis.js'
 import { discoverFlowsWithAi } from './flows-ai.js'
 import { reverseEngineerProjectWithAi } from './reverse-engineer.js'
-import { normalizeProjectModel, calculateProjectProgress, normalizeBusinessRule, normalizeUserFlow, normalizeBusinessFlow, normalizeTechStack, normalizeEndpoint, normalizeApiContract, normalizeDatabaseTable, normalizeDatabaseRelationship } from './model-schema.js'
+import { normalizeProjectModel, calculateProjectProgress, normalizeBusinessRule, normalizeUserFlow, normalizeBusinessFlow, normalizeTechStack, normalizeEndpoint, normalizeApiContract, normalizeDatabaseTable, normalizeDatabaseRelationship, normalizeScreen, normalizeWireframe, normalizeDesignSystem, normalizeExecutionPhase, normalizeExecutionTask, normalizeDependencyGraph, normalizeQualityGate } from './model-schema.js'
+import { compileAgentContext, dispatchTaskToAgent, completeTaskAndAdvance } from './agent-context.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -493,6 +494,14 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
           stateMachines = Array.isArray(loaded) ? loaded : [loaded]
         }
 
+        // Carga de la Suite Completa de 14 Diagramas UML Estándar OMG
+        let umlDiagrams = []
+        const umlPath = path.join(seqDir, 'uml-diagrams.json')
+        if (fs.existsSync(umlPath)) {
+          const loaded = readJsonFile(umlPath, [])
+          umlDiagrams = Array.isArray(loaded) ? loaded : [loaded]
+        }
+
         let screens = readJsonFile(path.join(uiDir, 'screens.json'), [])
         const detected = scanProjectViews(projectRoot)
         if (detected && detected.length > 0) {
@@ -525,7 +534,9 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
         const apiContracts = readJsonFile(path.join(apiDir, 'contracts.json'), [])
         const execTasks = readJsonFile(path.join(execDir, 'tasks.json'), [])
         const execPhases = readJsonFile(path.join(execDir, 'phases.json'), [])
+        const execDeps = readJsonFile(path.join(execDir, 'dependencies.json'), {})
         const qualityGates = readJsonFile(path.join(govDir, 'quality-gates.json'), null)
+        const agentContext = readJsonFile(path.join(govDir, 'agent-context.json'), null)
         const wireframes = readJsonFile(path.join(uiDir, 'wireframes.json'), [])
         const uiComponents = readJsonFile(path.join(uiDir, 'components.json'), [])
         const designSystem = readJsonFile(path.join(uiDir, 'design-system.json'), null)
@@ -548,8 +559,8 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
           api: { endpoints, contracts: apiContracts },
           sequences,
           uiUx: { screens, components: uiComponents, wireframes, designSystem },
-          execution: { phases: execPhases, tasks: execTasks, activeTask },
-          governance: { qualityGates }
+          execution: { phases: execPhases, tasks: execTasks, dependencies: execDeps, activeTask },
+          governance: { qualityGates, agentContext }
         })
 
         // Sincronizar stage y progress en project
@@ -579,7 +590,15 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
           testPlan,
           sequences,
           stateMachines,
-          uiUx: { screens },
+          umlDiagrams,
+          uiUx: {
+            screens: modelV2.uiUx.screens,
+            wireframes: modelV2.uiUx.wireframes,
+            components: modelV2.uiUx.components,
+            designSystem: modelV2.uiUx.designSystem
+          },
+          wireframes: modelV2.uiUx.wireframes,
+          designSystem: modelV2.uiUx.designSystem,
           drift,
           convergence: calculateConvergence(projectRoot, sddDir),
           // Integración con Project Model v2
@@ -590,6 +609,8 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
           api: modelV2.api,
           execution: modelV2.execution,
           governance: modelV2.governance,
+          activeTask: modelV2.execution.activeTask,
+          agentContext: modelV2.governance.agentContext,
           stageInfo: {
             stage: modelV2.meta.stage,
             progress: modelV2.meta.progress,
@@ -878,6 +899,28 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
             return
           }
 
+          // 2.75 Mutar Diagrama UML en la Suite (14 diagramas)
+          if (body.umlDiagram || body.umlDiagramId) {
+            const umlPath = path.join(seqDir, 'uml-diagrams.json')
+            let diags = readJsonFile(umlPath, [])
+            const targetId = body.umlDiagram?.id || body.umlDiagramId
+            const idx = diags.findIndex(d => d.id === targetId)
+            if (idx !== -1) {
+              const updated = { ...diags[idx], ...(body.umlDiagram || body) }
+              diags[idx] = updated
+              writeJsonFile(umlPath, diags)
+              res.writeHead(200, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ success: true, updatedUmlDiagram: updated }))
+              return
+            } else if (body.umlDiagram) {
+              diags.push(body.umlDiagram)
+              writeJsonFile(umlPath, diags)
+              res.writeHead(200, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ success: true, updatedUmlDiagram: body.umlDiagram }))
+              return
+            }
+          }
+
           // 2.8 Mutaciones del Project Model v2
           if (body.product) {
             if (body.product.vision) writeJsonFile(path.join(productDir, 'vision.json'), body.product.vision)
@@ -1158,6 +1201,81 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
             return
           }
 
+          if (body.screen) {
+            const scFile = path.join(uiDir, 'screens.json')
+            let screens = readJsonFile(scFile, [])
+            if (!Array.isArray(screens)) screens = []
+            const normalized = normalizeScreen(body.screen, screens.length)
+            const idx = screens.findIndex(s => s.id === normalized.id || s.route === normalized.route)
+            if (idx !== -1) {
+              screens[idx] = { ...screens[idx], ...normalized }
+            } else {
+              screens.push(normalized)
+            }
+            writeJsonFile(scFile, screens)
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, updatedScreen: normalized, screens }))
+            return
+          }
+
+          if (body.deleteScreenId) {
+            const scFile = path.join(uiDir, 'screens.json')
+            let screens = readJsonFile(scFile, [])
+            if (Array.isArray(screens)) {
+              screens = screens.filter(s => s.id !== body.deleteScreenId && s.route !== body.deleteScreenId)
+              writeJsonFile(scFile, screens)
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, deletedScreenId: body.deleteScreenId, screens }))
+            return
+          }
+
+          if (body.wireframe) {
+            const wfFile = path.join(uiDir, 'wireframes.json')
+            let wireframes = readJsonFile(wfFile, [])
+            if (!Array.isArray(wireframes)) wireframes = []
+            const normalized = normalizeWireframe(body.wireframe, wireframes.length)
+            const idx = wireframes.findIndex(w => w.id === normalized.id)
+            if (idx !== -1) {
+              wireframes[idx] = { ...wireframes[idx], ...normalized }
+            } else {
+              wireframes.push(normalized)
+            }
+            writeJsonFile(wfFile, wireframes)
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, updatedWireframe: normalized, wireframes }))
+            return
+          }
+
+          if (body.deleteWireframeId) {
+            const wfFile = path.join(uiDir, 'wireframes.json')
+            let wireframes = readJsonFile(wfFile, [])
+            if (Array.isArray(wireframes)) {
+              wireframes = wireframes.filter(w => w.id !== body.deleteWireframeId)
+              writeJsonFile(wfFile, wireframes)
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, deletedWireframeId: body.deleteWireframeId, wireframes }))
+            return
+          }
+
+          if (body.designSystem) {
+            const dsFile = path.join(uiDir, 'design-system.json')
+            const existing = readJsonFile(dsFile, {})
+            const updated = normalizeDesignSystem({ ...existing, ...body.designSystem })
+            writeJsonFile(dsFile, updated)
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, updatedDesignSystem: updated, designSystem: updated }))
+            return
+          }
+
+          if (body.uiUx) {
+            if (body.uiUx.screens) writeJsonFile(path.join(uiDir, 'screens.json'), body.uiUx.screens.map(normalizeScreen))
+            if (body.uiUx.wireframes) writeJsonFile(path.join(uiDir, 'wireframes.json'), body.uiUx.wireframes.map(normalizeWireframe))
+            if (body.uiUx.designSystem) writeJsonFile(path.join(uiDir, 'design-system.json'), normalizeDesignSystem(body.uiUx.designSystem))
+            if (body.uiUx.components) writeJsonFile(path.join(uiDir, 'components.json'), body.uiUx.components)
+          }
+
           if (body.api) {
             if (body.api.endpoints) writeJsonFile(path.join(apiDir, 'endpoints.json'), body.api.endpoints.map(normalizeEndpoint))
             if (body.api.contracts) writeJsonFile(path.join(apiDir, 'contracts.json'), body.api.contracts.map(normalizeApiContract))
@@ -1166,6 +1284,121 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
           if (body.database) {
             if (body.database.tables) writeJsonFile(path.join(dbDir, 'schema-erd.json'), { tables: body.database.tables.map(normalizeDatabaseTable) })
             if (body.database.relationships) writeJsonFile(path.join(dbDir, 'relationships.json'), body.database.relationships.map(normalizeDatabaseRelationship))
+          }
+
+          let touchedModel = false
+          const resultPayload = { success: true }
+
+          if (body.phase) {
+            const phFile = path.join(execDir, 'phases.json')
+            let phases = readJsonFile(phFile, [])
+            if (!Array.isArray(phases)) phases = []
+            const normalized = normalizeExecutionPhase(body.phase, phases.length)
+            const idx = phases.findIndex(p => p.id === normalized.id)
+            if (idx !== -1) {
+              phases[idx] = { ...phases[idx], ...normalized }
+            } else {
+              phases.push(normalized)
+            }
+            writeJsonFile(phFile, phases)
+            resultPayload.updatedPhase = normalized
+            resultPayload.phases = phases
+            touchedModel = true
+          }
+
+          if (body.deletePhaseId) {
+            const phFile = path.join(execDir, 'phases.json')
+            let phases = readJsonFile(phFile, [])
+            if (Array.isArray(phases)) {
+              phases = phases.filter(p => p.id !== body.deletePhaseId)
+              writeJsonFile(phFile, phases)
+            }
+            resultPayload.deletedPhaseId = body.deletePhaseId
+            resultPayload.phases = phases
+            touchedModel = true
+          }
+
+          if (body.task) {
+            const tFile = path.join(execDir, 'tasks.json')
+            let tasks = readJsonFile(tFile, [])
+            if (!Array.isArray(tasks)) tasks = []
+            const normalized = normalizeExecutionTask(body.task, tasks.length)
+            const idx = tasks.findIndex(t => t.id === normalized.id)
+            if (idx !== -1) {
+              tasks[idx] = { ...tasks[idx], ...normalized }
+            } else {
+              tasks.push(normalized)
+            }
+            writeJsonFile(tFile, tasks)
+
+            // Actualizar dependencias si aplica
+            const dFile = path.join(execDir, 'dependencies.json')
+            const existingDeps = readJsonFile(dFile, {})
+            const updatedDeps = normalizeDependencyGraph(existingDeps, tasks)
+            writeJsonFile(dFile, updatedDeps)
+
+            resultPayload.updatedTask = normalized
+            resultPayload.tasks = tasks
+            touchedModel = true
+          }
+
+          if (body.deleteTaskId) {
+            const tFile = path.join(execDir, 'tasks.json')
+            let tasks = readJsonFile(tFile, [])
+            if (Array.isArray(tasks)) {
+              tasks = tasks.filter(t => t.id !== body.deleteTaskId)
+              writeJsonFile(tFile, tasks)
+            }
+            resultPayload.deletedTaskId = body.deleteTaskId
+            resultPayload.tasks = tasks
+            touchedModel = true
+          }
+
+          if (body.dependencies) {
+            const dFile = path.join(execDir, 'dependencies.json')
+            const tasks = readJsonFile(path.join(execDir, 'tasks.json'), [])
+            const updated = normalizeDependencyGraph(body.dependencies, tasks)
+            writeJsonFile(dFile, updated)
+            resultPayload.updatedDependencies = updated
+            touchedModel = true
+          }
+
+          if (body.qualityGate) {
+            const gFile = path.join(govDir, 'quality-gates.json')
+            let gates = readJsonFile(gFile, [])
+            if (!Array.isArray(gates)) gates = []
+            const normalized = normalizeQualityGate(body.qualityGate, gates.length)
+            const idx = gates.findIndex(g => g.id === normalized.id)
+            if (idx !== -1) {
+              gates[idx] = { ...gates[idx], ...normalized }
+            } else {
+              gates.push(normalized)
+            }
+            writeJsonFile(gFile, gates)
+            resultPayload.updatedGate = normalized
+            resultPayload.qualityGates = gates
+            touchedModel = true
+          }
+
+          if (touchedModel) {
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify(resultPayload))
+            return
+          }
+
+          if (body.dispatchTaskId || body.activateTaskId) {
+            const targetId = body.dispatchTaskId || body.activateTaskId
+            const result = dispatchTaskToAgent(projectRoot, targetId, body.assignedTo || 'Antigravity')
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify(result))
+            return
+          }
+
+          if (body.completeTaskId) {
+            const result = completeTaskAndAdvance(projectRoot, body.completeTaskId)
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify(result))
+            return
           }
 
           if (body.execution) {
@@ -1220,6 +1453,57 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
       writeJsonFile(path.join(uiDir, 'screens.json'), merged)
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ success: true, count: merged.length, screens: merged }))
+      return
+    }
+
+    // 3.055 Suite UML API GET /api/uml & POST /api/uml (14 Diagramas Oficiales OMG)
+    if (url.pathname === '/api/uml' && req.method === 'GET') {
+      const umlPath = path.join(seqDir, 'uml-diagrams.json')
+      const diagrams = readJsonFile(umlPath, [])
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({
+        success: true,
+        total: diagrams.length,
+        structural: diagrams.filter(d => d.category === 'structural'),
+        behavioral: diagrams.filter(d => d.category === 'behavioral'),
+        diagrams
+      }))
+      return
+    }
+
+    if (url.pathname === '/api/uml' && req.method === 'POST') {
+      let bodyData = ''
+      req.on('data', chunk => { bodyData += chunk })
+      req.on('end', () => {
+        try {
+          const body = JSON.parse(bodyData || '{}')
+          const umlPath = path.join(seqDir, 'uml-diagrams.json')
+          let diagrams = readJsonFile(umlPath, [])
+          const targetId = body.diagramId || body.id || body.diagram?.id
+          if (targetId) {
+            const idx = diagrams.findIndex(d => d.id === targetId)
+            if (idx !== -1) {
+              diagrams[idx] = { ...diagrams[idx], ...(body.diagram || body) }
+              writeJsonFile(umlPath, diagrams)
+              res.writeHead(200, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ success: true, updatedDiagram: diagrams[idx] }))
+              return
+            }
+          }
+          if (body.diagram && body.diagram.name) {
+            diagrams.push(body.diagram)
+            writeJsonFile(umlPath, diagrams)
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, diagram: body.diagram }))
+            return
+          }
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: 'Especifique un diagramId o diagram válido' }))
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: err.message }))
+        }
+      })
       return
     }
 
@@ -1432,6 +1716,52 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
       return
     }
 
+    // 3.08b Dispatch Execution Task to Agent POST /api/tasks/dispatch
+    if (url.pathname === '/api/tasks/dispatch' && req.method === 'POST') {
+      let bodyData = ''
+      req.on('data', chunk => { bodyData += chunk })
+      req.on('end', () => {
+        try {
+          const { taskId, assignedTo = 'Antigravity' } = JSON.parse(bodyData || '{}')
+          if (!taskId) {
+            res.writeHead(400, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ error: 'taskId es requerido' }))
+            return
+          }
+          const result = dispatchTaskToAgent(projectRoot, taskId, assignedTo)
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify(result))
+        } catch (err) {
+          res.writeHead(err.message.includes('bloqueada') ? 409 : 500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: err.message }))
+        }
+      })
+      return
+    }
+
+    // 3.08c Complete Execution Task POST /api/tasks/complete
+    if (url.pathname === '/api/tasks/complete' && req.method === 'POST') {
+      let bodyData = ''
+      req.on('data', chunk => { bodyData += chunk })
+      req.on('end', () => {
+        try {
+          const { taskId } = JSON.parse(bodyData || '{}')
+          if (!taskId) {
+            res.writeHead(400, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ error: 'taskId es requerido' }))
+            return
+          }
+          const result = completeTaskAndAdvance(projectRoot, taskId)
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify(result))
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: err.message }))
+        }
+      })
+      return
+    }
+
     // 3.09 Deep Brownfield Reverse Engineering with AI POST /api/sdd/reverse-engineer
     if (url.pathname === '/api/sdd/reverse-engineer' && req.method === 'POST') {
       let bodyData = ''
@@ -1536,14 +1866,15 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
       req.on('data', chunk => { bodyData += chunk })
       req.on('end', async () => {
         try {
-          const { messages, currentPreview, apiKey, model, stage } = JSON.parse(bodyData || '{}')
+          const { messages, currentPreview, apiKey, model, stage, phase } = JSON.parse(bodyData || '{}')
           const orConfig = getOpenRouterConfig(projectRoot)
           const effectiveKey = apiKey || orConfig.apiKey
           const effectiveModel = model || orConfig.defaultModel
           const chatResult = await processGenesisChat(messages, currentPreview, {
             apiKey: effectiveKey,
             model: effectiveModel,
-            stage
+            stage,
+            phase
           })
           res.writeHead(200, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ success: true, ...chatResult }))

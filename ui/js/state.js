@@ -9,11 +9,14 @@ export const state = {
   selectedEngine: 'openrouter',
   selectedModel: 'inclusionai/ling-3.0-flash-sante:free',
   openRouterConfig: null,
-  isSidebarOpen: true,
   activeSessionId: null,
+  currentChatStage: 'discovery',
+  currentChatPhase: 1,
 
-  // UML Perspective
-  activeUmlType: 'sequence', // 'sequence' | 'state'
+  // UML Perspective (Suite Completa de 14 Diagramas OMG)
+  activeUmlCategory: 'all', // 'all' | 'structural' | 'behavioral'
+  activeUmlType: 'all', // 'all' | 'class' | 'object' | 'component' | 'deployment' | 'package' | 'composite' | 'profile' | 'usecase' | 'activity' | 'state' | 'sequence' | 'communication' | 'timing' | 'interaction-overview'
+  activeUmlDiagramId: 'UML-01-CLASS',
   activeSequenceId: null,
   activeStateId: null,
   isMermaidRawVisible: false,

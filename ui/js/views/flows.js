@@ -13,6 +13,11 @@ export function renderFlows() {
   const businessFlows = state.appState?.businessFlows || state.appState?.flows || [];
   const userFlows = state.appState?.userFlows || [];
 
+  const tabBadgeFlows = document.getElementById('tab-badge-flows');
+  if (tabBadgeFlows) {
+    tabBadgeFlows.innerText = String(businessFlows.length + userFlows.length);
+  }
+
   // Bind discover button in top bar if present
   const topBtn = document.getElementById('btn-discover-flows-ai');
   if (topBtn) {

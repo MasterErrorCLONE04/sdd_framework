@@ -392,6 +392,222 @@ export function normalizeDatabaseRelationship(r, index = 0) {
 }
 
 /**
+ * Normaliza y valida una Pantalla UI/UX Enriquecida
+ */
+export function normalizeScreen(sc, index = 0) {
+  const id = sc.id || `SCR-${String(index + 1).padStart(2, '0')}`
+  const name = sc.name || sc.title || `Pantalla ${index + 1}`
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  const isRootCandidate = index === 0 && (!sc.name || sc.name.toLowerCase().includes('dashboard') || sc.name.toLowerCase().includes('inicio') || sc.name.toLowerCase().includes('home'))
+  const route = sc.route || (isRootCandidate ? '/' : `/${slug}`)
+  const isDynamic = Boolean(sc.isDynamic || (route && (route.includes('[') || route.includes(':'))))
+
+  const rawStates = sc.states && typeof sc.states === 'object' ? sc.states : {}
+  const states = {
+    loading: rawStates.loading || 'Skeleton loader activo durante la obtención de datos.',
+    empty: rawStates.empty || 'Sin registros disponibles. Mostrar botón para crear primer elemento.',
+    error: rawStates.error || 'Mensaje de error descriptivo con opción de reintento.',
+    success: rawStates.success || 'Contenido principal renderizado e interactivo.'
+  }
+
+  return {
+    id,
+    name,
+    route,
+    actor: sc.actor || sc.requiredRole || 'Usuario',
+    purpose: sc.purpose || sc.description || `Permitir al usuario interactuar con la vista ${name}.`,
+    components: Array.isArray(sc.components) ? sc.components : (sc.component ? [sc.component] : []),
+    states,
+    dataRequired: Array.isArray(sc.dataRequired) ? sc.dataRequired : (sc.entities ? sc.entities : []),
+    relatedFlows: Array.isArray(sc.relatedFlows) ? sc.relatedFlows : (sc.flowId ? [sc.flowId] : []),
+    relatedStories: Array.isArray(sc.relatedStories) ? sc.relatedStories : (sc.storyId ? [sc.storyId] : []),
+    isDynamic,
+    framework: sc.framework || 'Web',
+    filePath: sc.filePath || sc.file || sc.sourceFile || '',
+    layout: sc.layout || 'standard-app',
+    healthPercent: typeof sc.healthPercent === 'number' ? sc.healthPercent : 100,
+    status: sc.status || 'planned'
+  }
+}
+
+/**
+ * Normaliza y valida un Wireframe Declarativo
+ */
+export function normalizeWireframe(wf, index = 0) {
+  const id = wf.id || `WF-${String(index + 1).padStart(2, '0')}`
+  const title = wf.title || wf.name || `Wireframe ${index + 1}`
+  const layout = wf.layout || 'dashboard' // 'dashboard' | 'split' | 'single-column' | 'form-center' | 'table-list'
+
+  let blocks = []
+  if (Array.isArray(wf.blocks)) {
+    blocks = wf.blocks.map((b, bIdx) => ({
+      id: b.id || `blk-${bIdx + 1}`,
+      type: b.type || 'card',
+      title: b.title || b.label || '',
+      description: b.description || '',
+      properties: typeof b.properties === 'object' && b.properties !== null ? b.properties : { ...b }
+    }))
+  } else {
+    blocks = [
+      { id: 'blk-1', type: 'navbar', title: 'Barra de Navegación', properties: { brand: 'App', links: ['Inicio', 'Módulos'] } },
+      { id: 'blk-2', type: 'stats-grid', title: 'Métricas Clave', properties: { items: [{ label: 'Métrica 1', value: '100' }, { label: 'Métrica 2', value: '95%' }] } },
+      { id: 'blk-3', type: 'table', title: 'Registros', properties: { columns: ['ID', 'Nombre', 'Estado', 'Fecha'] } }
+    ]
+  }
+
+  return {
+    id,
+    screenId: wf.screenId || wf.screen || `SCR-${String(index + 1).padStart(2, '0')}`,
+    title,
+    layout,
+    blocks,
+    notes: wf.notes || wf.description || ''
+  }
+}
+
+/**
+ * Normaliza y valida el Design System Tokens
+ */
+export function normalizeDesignSystem(ds = {}) {
+  const isObj = (v) => typeof v === 'object' && v !== null
+  const colors = isObj(ds.colors) ? ds.colors : {}
+  const typography = isObj(ds.typography) ? ds.typography : {}
+  const radius = isObj(ds.radius) ? ds.radius : {}
+  const spacing = isObj(ds.spacing) ? ds.spacing : {}
+
+  return {
+    theme: ds.theme || 'modern-clean',
+    colors: {
+      primary: colors.primary || '#7c3aed',
+      secondary: colors.secondary || '#4f46e5',
+      accent: colors.accent || '#10b981',
+      background: colors.background || '#09090b',
+      surface: colors.surface || '#18181b',
+      text: colors.text || '#f4f4f5',
+      border: colors.border || '#27272a',
+      muted: colors.muted || '#71717a',
+      ...colors
+    },
+    typography: {
+      fontFamily: typography.fontFamily || 'Inter, sans-serif',
+      headingFont: typography.headingFont || 'Inter, sans-serif',
+      monoFont: typography.monoFont || 'JetBrains Mono, monospace',
+      sizes: typography.sizes || { xs: '0.75rem', sm: '0.875rem', base: '1rem', lg: '1.125rem', xl: '1.25rem', '2xl': '1.5rem' },
+      ...typography
+    },
+    radius: {
+      sm: radius.sm || '0.375rem',
+      md: radius.md || '0.5rem',
+      lg: radius.lg || '0.75rem',
+      full: radius.full || '9999px',
+      ...radius
+    },
+    spacing: {
+      base: spacing.base || '1rem',
+      container: spacing.container || '1280px',
+      ...spacing
+    }
+  }
+}
+
+/**
+ * Normaliza y valida una Fase del Plan de Ejecución
+ */
+export function normalizeExecutionPhase(ph, index = 0) {
+  const id = ph.id || `phase-${index + 1}`
+  const order = typeof ph.order === 'number' ? ph.order : (index + 1)
+  return {
+    id,
+    name: ph.name || `Fase ${order}: ${ph.title || 'Ejecución'}`,
+    order,
+    status: ph.status || 'planned', // 'planned' | 'in_progress' | 'done' | 'blocked'
+    description: ph.description || '',
+    qualityGateId: ph.qualityGateId || `gate-${id}`,
+    taskIds: Array.isArray(ph.taskIds) ? ph.taskIds : []
+  }
+}
+
+/**
+ * Normaliza y valida una Tarea Atómica de Ejecución con Scope Shield
+ */
+export function normalizeExecutionTask(t, index = 0) {
+  const id = t.id || `TASK-${String(index + 1).padStart(2, '0')}`
+  const rawScope = t.scopeFiles || t.scope || []
+  const scopeFiles = Array.isArray(rawScope) && rawScope.length > 0 ? rawScope : ['src/**']
+
+  const rawDiff = t.difficulty || t.estimatedDifficulty
+  let difficulty = 'M'
+  if (rawDiff) {
+    const dUpper = String(rawDiff).toUpperCase()
+    if (['XS', 'S', 'M', 'L', 'XL'].includes(dUpper)) difficulty = dUpper
+    else if (dUpper === 'LOW') difficulty = 'S'
+    else if (dUpper === 'HIGH') difficulty = 'L'
+    else difficulty = dUpper
+  }
+
+  return {
+    id,
+    title: t.title || t.name || `Tarea ${index + 1}`,
+    description: t.description || '',
+    storyId: t.storyId || (t.id && t.id.startsWith('US-') ? t.id : ''),
+    phaseId: t.phaseId || 'phase-1',
+    status: t.status || 'planned', // 'planned' | 'in_progress' | 'done' | 'blocked'
+    scopeFiles,
+    difficulty,
+    dependencies: Array.isArray(t.dependencies) ? t.dependencies : [],
+    acceptanceCriteria: Array.isArray(t.acceptanceCriteria) ? t.acceptanceCriteria : (Array.isArray(t.criteria) ? t.criteria : []),
+    assignedTo: t.assignedTo || null,
+    dispatchedAt: t.dispatchedAt || null,
+    completedAt: t.completedAt || null
+  }
+}
+
+/**
+ * Normaliza y valida el Grafo de Dependencias entre Tareas
+ */
+export function normalizeDependencyGraph(depGraph = {}, tasks = []) {
+  const nodes = Array.isArray(depGraph?.nodes) && depGraph.nodes.length > 0
+    ? depGraph.nodes
+    : tasks.map(t => t.id)
+
+  const edges = Array.isArray(depGraph?.edges) ? [...depGraph.edges] : []
+
+  // Sincronizar aristas a partir de t.dependencies
+  tasks.forEach(t => {
+    if (Array.isArray(t.dependencies)) {
+      t.dependencies.forEach(depId => {
+        const exists = edges.some(e => e.from === depId && e.to === t.id)
+        if (!exists) {
+          edges.push({ from: depId, to: t.id, type: 'blocks' })
+        }
+      })
+    }
+  })
+
+  return {
+    nodes,
+    edges
+  }
+}
+
+/**
+ * Normaliza y valida una Compuerta de Calidad (Quality Gate)
+ */
+export function normalizeQualityGate(g, index = 0) {
+  const id = g.id || `gate-${index + 1}`
+  return {
+    id,
+    name: g.name || `Compuerta ${index + 1}`,
+    stage: g.stage || 'discovery',
+    status: g.status || 'pending', // 'pending' | 'approved' | 'blocked'
+    criteria: Array.isArray(g.criteria) ? g.criteria : [],
+    description: g.description || `Compuerta de control de calidad para la etapa ${g.stage || 'discovery'}.`,
+    approvedAt: g.approvedAt || null,
+    approvedBy: g.approvedBy || null
+  }
+}
+
+/**
  * Normaliza y fusiona datos provenientes de versiones anteriores de .sdd/
  * asegurando retrocompatibilidad total sin pérdida de información.
  */
@@ -499,28 +715,32 @@ export function normalizeProjectModel(raw = {}) {
   }
 
   // 10. UI/UX
-  if (raw.uiUx) {
-    base.uiUx.screens = Array.isArray(raw.uiUx.screens) ? raw.uiUx.screens : []
-    base.uiUx.components = Array.isArray(raw.uiUx.components) ? raw.uiUx.components : []
-    base.uiUx.wireframes = Array.isArray(raw.uiUx.wireframes) ? raw.uiUx.wireframes : []
-    if (raw.uiUx.designSystem) {
-      base.uiUx.designSystem = { ...base.uiUx.designSystem, ...raw.uiUx.designSystem }
-    }
-  }
+  const rawScreens = Array.isArray(raw.uiUx?.screens) ? raw.uiUx.screens : (Array.isArray(raw.screens) ? raw.screens : [])
+  base.uiUx.screens = rawScreens.map(normalizeScreen)
+
+  const rawWireframes = Array.isArray(raw.uiUx?.wireframes) ? raw.uiUx.wireframes : (Array.isArray(raw.wireframes) ? raw.wireframes : [])
+  base.uiUx.wireframes = rawWireframes.map(normalizeWireframe)
+
+  const rawComponents = Array.isArray(raw.uiUx?.components) ? raw.uiUx.components : (Array.isArray(raw.components) ? raw.components : [])
+  base.uiUx.components = rawComponents
+
+  base.uiUx.designSystem = normalizeDesignSystem(raw.uiUx?.designSystem || raw.designSystem || {})
 
   // 11. Execution & Tasks
-  if (raw.execution) {
-    base.execution.phases = Array.isArray(raw.execution.phases) ? raw.execution.phases : base.execution.phases
-    base.execution.tasks = Array.isArray(raw.execution.tasks) ? raw.execution.tasks : []
-    base.execution.activeTask = raw.execution.activeTask || raw.activeTask || null
-  } else if (raw.activeTask) {
-    base.execution.activeTask = raw.activeTask
-  }
+  const rawPhases = Array.isArray(raw.execution?.phases) ? raw.execution.phases : (Array.isArray(raw.phases) ? raw.phases : base.execution.phases)
+  base.execution.phases = rawPhases.map(normalizeExecutionPhase)
+
+  const rawTasks = Array.isArray(raw.execution?.tasks) ? raw.execution.tasks : (Array.isArray(raw.tasks) ? raw.tasks : [])
+  base.execution.tasks = rawTasks.map(normalizeExecutionTask)
+
+  base.execution.dependencies = normalizeDependencyGraph(raw.execution?.dependencies || raw.dependencies, base.execution.tasks)
+  base.execution.activeTask = raw.execution?.activeTask || raw.activeTask || null
 
   // 12. Governance & Quality Gates
-  if (raw.governance?.qualityGates) {
-    base.governance.qualityGates = raw.governance.qualityGates
-  }
+  const rawGates = Array.isArray(raw.governance?.qualityGates) ? raw.governance.qualityGates : (Array.isArray(raw.qualityGates) ? raw.qualityGates : base.governance.qualityGates)
+  base.governance.qualityGates = rawGates.map(normalizeQualityGate)
+
+  base.governance.agentContext = raw.governance?.agentContext || raw.agentContext || null
 
   // Calcular etapa y progreso si no están definidos
   const progressInfo = calculateProjectProgress(base)

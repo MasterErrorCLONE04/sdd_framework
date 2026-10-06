@@ -39,11 +39,11 @@ export async function dispatchGenesisTask(prompt, assignedTo = 'Antigravity') {
   return res.json();
 }
 
-export async function chatGenesis({ messages, currentPreview, engine, model }) {
+export async function chatGenesis({ messages, currentPreview, engine, model, stage, phase }) {
   const res = await fetch('/api/genesis/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, currentPreview, engine, model })
+    body: JSON.stringify({ messages, currentPreview, engine, model, stage, phase })
   });
   return res.json();
 }
@@ -132,5 +132,31 @@ export async function auditConvergence() {
 
 export async function togglePrinciple(togglePrincipleId) {
   return patchSdd({ togglePrincipleId });
+}
+
+export async function dispatchExecutionTask(taskId, assignedTo = 'Antigravity') {
+  const res = await fetch('/api/tasks/dispatch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ taskId, assignedTo })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Error al despachar tarea al agente');
+  }
+  return res.json();
+}
+
+export async function completeExecutionTask(taskId) {
+  const res = await fetch('/api/tasks/complete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ taskId })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Error al completar la tarea');
+  }
+  return res.json();
 }
 

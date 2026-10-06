@@ -96,37 +96,42 @@
         class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-1.5 transition-all shadow-md shadow-purple-600/20 cursor-pointer"
       >
         <i data-lucide="layout-dashboard" class="w-3.5 h-3.5 text-purple-200"></i>
-        <span>Cabina (12 Perspectivas)</span>
+        <span>Cabina SDD (6 Dominios)</span>
       </button>
     </div>
   </header>
 
   <!-- Progressive Engineering Phase Stepper (Guía Didáctica para No Técnicos) -->
   <div id="genesis-stepper-bar" class="shrink-0 bg-white border-b border-zinc-200/90 px-4 py-2.5 flex items-center justify-between text-xs z-10 overflow-x-auto shadow-2xs">
-    <div class="flex items-center gap-1.5 md:gap-3 mx-auto">
-      <div id="step-pill-1" class="step-pill flex items-center gap-1.5 px-3 py-1 rounded-xl font-bold bg-purple-100 text-purple-900 border border-purple-200 transition-all cursor-pointer" onclick="setPromptIdea('Quiero definir mejor el problema y a quién va dirigido este software')">
+    <div class="flex items-center gap-1.5 md:gap-2.5 mx-auto flex-wrap">
+      <div id="step-pill-1" class="step-pill flex items-center gap-1.5 px-3 py-1 rounded-xl font-bold bg-purple-100 text-purple-900 border border-purple-200 transition-all cursor-pointer" onclick="advanceStageFromChat(1)" title="Fase 1: Problema Raíz y Audiencia">
         <span class="step-number w-4 h-4 rounded-full bg-purple-600 text-white flex items-center justify-center text-[10px]">1</span>
         <span>Problema & Audiencia</span>
       </div>
       <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-zinc-300"></i>
-      <div id="step-pill-2" class="step-pill flex items-center gap-1.5 px-3 py-1 rounded-xl font-bold bg-zinc-100 text-zinc-500 border border-zinc-200 transition-all cursor-pointer" onclick="setPromptIdea('Ayúdame a definir los Non-Goals y el alcance estricto de la V1')">
+      <div id="step-pill-2" class="step-pill flex items-center gap-1.5 px-3 py-1 rounded-xl font-bold bg-zinc-100 text-zinc-500 border border-zinc-200 transition-all cursor-pointer" onclick="advanceStageFromChat(2)" title="Fase 2: Alcance V1 y Non-Goals (Scope Shield)">
         <span class="step-number w-4 h-4 rounded-full bg-zinc-300 text-zinc-600 flex items-center justify-center text-[10px]">2</span>
         <span>Alcance & Non-Goals</span>
       </div>
       <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-zinc-300"></i>
-      <div id="step-pill-3" class="step-pill flex items-center gap-1.5 px-3 py-1 rounded-xl font-bold bg-zinc-100 text-zinc-500 border border-zinc-200 transition-all cursor-pointer" onclick="setPromptIdea('Estructura las historias de usuario Jira con criterios Gherkin Dado-Cuando-Entonces')">
+      <div id="step-pill-3" class="step-pill flex items-center gap-1.5 px-3 py-1 rounded-xl font-bold bg-zinc-100 text-zinc-500 border border-zinc-200 transition-all cursor-pointer" onclick="advanceStageFromChat(3)" title="Fase 3: Historias de Usuario Jira y Criterios Gherkin">
         <span class="step-number w-4 h-4 rounded-full bg-zinc-300 text-zinc-600 flex items-center justify-center text-[10px]">3</span>
         <span>Historias & Gherkin</span>
       </div>
       <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-zinc-300"></i>
-      <div id="step-pill-4" class="step-pill flex items-center gap-1.5 px-3 py-1 rounded-xl font-bold bg-zinc-100 text-zinc-500 border border-zinc-200 transition-all cursor-pointer" onclick="setPromptIdea('Diseña las pantallas de la interfaz, rutas y flujos de navegación')">
+      <div id="step-pill-4" class="step-pill flex items-center gap-1.5 px-3 py-1 rounded-xl font-bold bg-zinc-100 text-zinc-500 border border-zinc-200 transition-all cursor-pointer" onclick="advanceStageFromChat(4)" title="Fase 4: Pantallas UI, Rutas y Wireframes Declarativos">
         <span class="step-number w-4 h-4 rounded-full bg-zinc-300 text-zinc-600 flex items-center justify-center text-[10px]">4</span>
         <span>Pantallas & UI</span>
       </div>
       <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-zinc-300"></i>
-      <div id="step-pill-5" class="step-pill flex items-center gap-1.5 px-3 py-1 rounded-xl font-bold bg-zinc-100 text-zinc-500 border border-zinc-200 transition-all cursor-pointer" onclick="setPromptIdea('Genera la arquitectura técnica y el diagrama de secuencia UML')">
+      <div id="step-pill-5" class="step-pill flex items-center gap-1.5 px-3 py-1 rounded-xl font-bold bg-zinc-100 text-zinc-500 border border-zinc-200 transition-all cursor-pointer" onclick="advanceStageFromChat(5)" title="Fase 5: Arquitectura C4, Base de Datos ERD y Secuencias UML">
         <span class="step-number w-4 h-4 rounded-full bg-zinc-300 text-zinc-600 flex items-center justify-center text-[10px]">5</span>
-        <span>Arquitectura & UML</span>
+        <span>Arquitectura & DB</span>
+      </div>
+      <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-zinc-300"></i>
+      <div id="step-pill-6" class="step-pill flex items-center gap-1.5 px-3 py-1 rounded-xl font-bold bg-zinc-100 text-zinc-500 border border-zinc-200 transition-all cursor-pointer" onclick="advanceStageFromChat(6)" title="Fase 6: Plan de Ejecución, Scope Shield y Compuertas de Calidad">
+        <span class="step-number w-4 h-4 rounded-full bg-zinc-300 text-zinc-600 flex items-center justify-center text-[10px]">6</span>
+        <span>Plan & Handoff</span>
       </div>
     </div>
   </div>

@@ -1,6 +1,8 @@
 import fs from 'fs'
 import path from 'path'
 import { scanProject, scanProjectViews } from './scanner.js'
+import { normalizeScreen, normalizeWireframe, normalizeDesignSystem, normalizeExecutionPhase, normalizeExecutionTask, normalizeDependencyGraph, normalizeQualityGate } from './model-schema.js'
+import { compileAgentContext } from './agent-context.js'
 
 export function initializeSdd(projectRoot = process.cwd(), options = {}) {
   const sddDir = path.join(projectRoot, '.sdd')
@@ -161,11 +163,59 @@ export function initializeSdd(projectRoot = process.cwd(), options = {}) {
     }, null, 2), 'utf-8')
   }
 
-  // 4.5 ui-ux/screens.json
+  // 4.5 ui-ux/ (screens.json, wireframes.json, design-system.json, components.json)
   const screensPath = path.join(sddDir, 'ui-ux', 'screens.json')
   if (!fs.existsSync(screensPath)) {
-    const screens = scanned?.detectedScreens || scanProjectViews(projectRoot)
+    const rawScreens = scanned?.detectedScreens || scanProjectViews(projectRoot) || []
+    const screens = (Array.isArray(rawScreens) && rawScreens.length > 0)
+      ? rawScreens.map(normalizeScreen)
+      : [
+          normalizeScreen({
+            id: 'SCR-01',
+            name: 'Dashboard Principal',
+            route: '/',
+            actor: 'Usuario',
+            purpose: 'Vista principal y centro de control del sistema.',
+            components: ['Navbar', 'Sidebar', 'MetricCard', 'DataTable'],
+            dataRequired: ['user_profile', 'summary_metrics'],
+            relatedFlows: ['01-flujo-principal']
+          })
+        ]
     fs.writeFileSync(screensPath, JSON.stringify(screens, null, 2), 'utf-8')
+  }
+
+  const wireframesPath = path.join(sddDir, 'ui-ux', 'wireframes.json')
+  if (!fs.existsSync(wireframesPath)) {
+    const initialWireframes = [
+      normalizeWireframe({
+        id: 'WF-01',
+        screenId: 'SCR-01',
+        title: 'Wireframe: Dashboard Principal',
+        layout: 'dashboard',
+        blocks: [
+          { id: 'blk-nav', type: 'navbar', title: 'Navegación Superior', properties: { brand: 'SDD App', links: ['Dashboard', 'Registros', 'Ajustes'] } },
+          { id: 'blk-side', type: 'sidebar', title: 'Barra Lateral', properties: { items: ['Inicio', 'Módulos', 'Historial'] } },
+          { id: 'blk-kpis', type: 'stats-grid', title: 'Tarjetas de Métricas', properties: { items: [{ label: 'Actividad Total', value: '1,280', change: '+12%' }, { label: 'Disponibilidad', value: '99.9%', change: '+0.1%' }] } },
+          { id: 'blk-tbl', type: 'table', title: 'Actividad Reciente', properties: { columns: ['ID', 'Descripción', 'Estado', 'Fecha'] } }
+        ]
+      })
+    ]
+    fs.writeFileSync(wireframesPath, JSON.stringify(initialWireframes, null, 2), 'utf-8')
+  }
+
+  const dsPath = path.join(sddDir, 'ui-ux', 'design-system.json')
+  if (!fs.existsSync(dsPath)) {
+    fs.writeFileSync(dsPath, JSON.stringify(normalizeDesignSystem(), null, 2), 'utf-8')
+  }
+
+  const compsPath = path.join(sddDir, 'ui-ux', 'components.json')
+  if (!fs.existsSync(compsPath)) {
+    fs.writeFileSync(compsPath, JSON.stringify([
+      { id: 'CMP-01', name: 'Navbar', type: 'layout', description: 'Barra superior con navegación y perfil.' },
+      { id: 'CMP-02', name: 'Sidebar', type: 'layout', description: 'Menú de navegación lateral.' },
+      { id: 'CMP-03', name: 'MetricCard', type: 'display', description: 'Tarjeta con valor numérico y tendencia.' },
+      { id: 'CMP-04', name: 'DataTable', type: 'data', description: 'Tabla con paginación, filtros y ordenación.' }
+    ], null, 2), 'utf-8')
   }
 
   // 4.6 product/ (vision.json, scope.json, actors.json, modules.json)
@@ -271,65 +321,90 @@ export function initializeSdd(projectRoot = process.cwd(), options = {}) {
     fs.writeFileSync(seqPath, JSON.stringify([], null, 2), 'utf-8')
   }
 
-  // 4.10 execution/ (tasks.json, phases.json)
+  // 4.10 execution/ (phases.json, tasks.json, dependencies.json)
   const execPhasesPath = path.join(sddDir, 'execution', 'phases.json')
   if (!fs.existsSync(execPhasesPath)) {
-    fs.writeFileSync(execPhasesPath, JSON.stringify([
-      { id: 'phase-1', name: 'Fase 1: Configuración & Modelos', order: 1, status: 'planned', taskIds: [] },
-      { id: 'phase-2', name: 'Fase 2: Lógica Central & API', order: 2, status: 'planned', taskIds: [] },
-      { id: 'phase-3', name: 'Fase 3: Interfaz & UX', order: 3, status: 'planned', taskIds: [] }
-    ], null, 2), 'utf-8')
+    const initialPhases = [
+      normalizeExecutionPhase({ id: 'phase-1', name: 'Fase 1: Configuración & Modelos Base', order: 1, status: 'planned', taskIds: ['TASK-01'] }, 0),
+      normalizeExecutionPhase({ id: 'phase-2', name: 'Fase 2: Lógica Central & Endpoints API', order: 2, status: 'planned', taskIds: ['TASK-02'] }, 1),
+      normalizeExecutionPhase({ id: 'phase-3', name: 'Fase 3: Interfaz & Experiencia UX', order: 3, status: 'planned', taskIds: ['TASK-03'] }, 2),
+      normalizeExecutionPhase({ id: 'phase-4', name: 'Fase 4: Verificación & Cierre SDD', order: 4, status: 'planned', taskIds: [] }, 3)
+    ]
+    fs.writeFileSync(execPhasesPath, JSON.stringify(initialPhases, null, 2), 'utf-8')
   }
 
   const execTasksPath = path.join(sddDir, 'execution', 'tasks.json')
   if (!fs.existsSync(execTasksPath)) {
-    fs.writeFileSync(execTasksPath, JSON.stringify([], null, 2), 'utf-8')
+    const initialTasks = [
+      normalizeExecutionTask({
+        id: 'TASK-01',
+        storyId: 'US-01',
+        phaseId: 'phase-1',
+        title: 'Fundación del Modelo y Esquemas de Base de Datos',
+        description: 'Crear entidades, tipos y migraciones base respetando el diseño ERD.',
+        scopeFiles: ['src/db/**', 'src/models/**', 'package.json'],
+        dependencies: [],
+        estimatedDifficulty: 'low',
+        acceptanceCriteria: [
+          { id: 'crit-1-1', scenario: 'Esquema validado', text: 'Esquema inicial y modelos tipados sin errores de compilación.', done: false }
+        ]
+      }, 0),
+      normalizeExecutionTask({
+        id: 'TASK-02',
+        storyId: 'US-02',
+        phaseId: 'phase-2',
+        title: 'Servicios de Negocio y Contratos de API REST',
+        description: 'Implementar controladores, servicios desacoplados y validación de reglas de negocio.',
+        scopeFiles: ['src/services/**', 'src/api/**', 'src/routes/**'],
+        dependencies: ['TASK-01'],
+        estimatedDifficulty: 'medium',
+        acceptanceCriteria: [
+          { id: 'crit-2-1', scenario: 'Endpoints funcionando', text: 'Endpoints retornan códigos HTTP esperados y validan payloads DTO.', done: false }
+        ]
+      }),
+      normalizeExecutionTask({
+        id: 'TASK-03',
+        storyId: 'US-03',
+        phaseId: 'phase-3',
+        title: 'Vistas e Interfaz de Usuario Declarativa',
+        description: 'Renderizar pantallas y componentes con estados reactivos según wireframes.',
+        scopeFiles: ['ui/**', 'src/views/**'],
+        dependencies: ['TASK-02'],
+        estimatedDifficulty: 'medium',
+        acceptanceCriteria: [
+          { id: 'crit-3-1', scenario: 'UI interactiva', text: 'Pantallas renderizan correctamente según Design System tokens.', done: false }
+        ]
+      })
+    ]
+    fs.writeFileSync(execTasksPath, JSON.stringify(initialTasks, null, 2), 'utf-8')
   }
 
-  // 4.11 governance/quality-gates.json
+  const execDepsPath = path.join(sddDir, 'execution', 'dependencies.json')
+  if (!fs.existsSync(execDepsPath)) {
+    const tasks = fs.existsSync(execTasksPath) ? JSON.parse(fs.readFileSync(execTasksPath, 'utf-8')) : []
+    const initialDeps = normalizeDependencyGraph({}, tasks)
+    fs.writeFileSync(execDepsPath, JSON.stringify(initialDeps, null, 2), 'utf-8')
+  }
+
+  // 4.11 governance/ (quality-gates.json, agent-context.json)
   const gatesPath = path.join(sddDir, 'governance', 'quality-gates.json')
   if (!fs.existsSync(gatesPath)) {
-    fs.writeFileSync(gatesPath, JSON.stringify([
-      { id: 'gate-problem', name: 'Definición de Problema & Valor', stage: 'discovery', status: 'pending' },
-      { id: 'gate-scope', name: 'Límites de Alcance & Non-Goals', stage: 'product', status: 'pending' },
-      { id: 'gate-requirements', name: 'Historias con Criterios Gherkin', stage: 'requirements', status: 'pending' },
-      { id: 'gate-architecture', name: 'Topología & Base de Datos', stage: 'architecture', status: 'pending' },
-      { id: 'gate-tasks', name: 'Plan de Tareas con Scope Shield', stage: 'execution', status: 'pending' }
-    ], null, 2), 'utf-8')
+    const initialGates = [
+      normalizeQualityGate({ id: 'gate-problem', name: 'Definición de Problema & Valor', stage: 'discovery', status: 'pending' }, 0),
+      normalizeQualityGate({ id: 'gate-scope', name: 'Límites de Alcance & Non-Goals', stage: 'product', status: 'pending' }, 1),
+      normalizeQualityGate({ id: 'gate-requirements', name: 'Historias con Criterios Gherkin', stage: 'requirements', status: 'pending' }, 2),
+      normalizeQualityGate({ id: 'gate-architecture', name: 'Topología & Base de Datos', stage: 'architecture', status: 'pending' }, 3),
+      normalizeQualityGate({ id: 'gate-tasks', name: 'Plan de Tareas con Scope Shield', stage: 'execution', status: 'pending' }, 4),
+      normalizeQualityGate({ id: 'gate-phase-1', name: 'Compuerta Fase 1: Modelos Base', stage: 'phase-1', status: 'pending' }, 5),
+      normalizeQualityGate({ id: 'gate-phase-2', name: 'Compuerta Fase 2: Lógica & API', stage: 'phase-2', status: 'pending' }, 6),
+      normalizeQualityGate({ id: 'gate-phase-3', name: 'Compuerta Fase 3: Interfaz & UX', stage: 'phase-3', status: 'pending' }, 7),
+      normalizeQualityGate({ id: 'gate-phase-4', name: 'Compuerta Fase 4: Verificación & Cierre', stage: 'phase-4', status: 'pending' }, 8)
+    ]
+    fs.writeFileSync(gatesPath, JSON.stringify(initialGates, null, 2), 'utf-8')
   }
 
-  // 5. AGENTS.md rulebook
-  if (!fs.existsSync(agentsMdPath)) {
-    const agentsRuleContent = `# Protocolo SDD (Spec-Driven Development) — "Single Source of Truth"
-
-El desarrollo, las especificaciones y las tareas de este proyecto se gestionan formalmente en \`.sdd/\`.
-Cualquier agente de IA (Antigravity, Cursor, Windsurf, Claude Code, etc.) DEBE acatar estrictamente las siguientes reglas:
-
-0. **Constitución e Invariantes del Proyecto:**
-   - Lee \`.sdd/core/constitution.json\`: Cumple rigurosamente con los invariantes de calidad, tipado y arquitectura.
-   - Lee \`.sdd/core/scope-boundaries.json\`: NUNCA programes features listadas en \`explicitNonGoals\`.
-   - Consulta \`.sdd/project.json\` para entender el propósito y compuertas de calidad.
-
-1. **Lectura Previa Obligatoria:**
-   - Antes de escribir código, consulta la Historia en \`.sdd/requirements/stories/<US-ID>.json\` o el nodo en \`.sdd/flows/<flujo>.json\`.
-   - Identifica el objetivo técnico y la lista blanca de archivos \`scopeFiles\`.
-
-2. **Aislamiento de Alcance (Scope Protection):**
-   - NO modifiques archivos que no estén listados en \`scopeFiles\` del nodo o historia activa. Está prohibido alterar código fuera de alcance.
-
-3. **Criterios de Aceptación Gherkin (Dado-Cuando-Entonces):**
-   - Cada Historia de Usuario define criterios de aceptación específicos.
-   - Verifica cada uno contra el código real y cambia \`"done": false\` a \`"done": true\` en el archivo de la historia.
-
-4. **Actualización Atómica del Estado (1 Archivo por Entidad):**
-   - Trabaja sobre el archivo individual de la entidad para evitar conflictos de merge.
-   - Cuando todas las tareas estén completadas, actualiza \`"status": "done"\` y firma en \`"assignedTo": "NombreAgente"\`.
-
-5. **Bucle de Convergencia (Spec Convergence):**
-   - Verifica que el código satisfaga el 100% de la especificación sin introducir regresiones ni archivos fuera de scope.
-`
-    fs.writeFileSync(agentsMdPath, agentsRuleContent, 'utf-8')
-  }
+  // 5. Compilar Contexto Agéntico y generar AGENTS.md dinámicamente
+  compileAgentContext(projectRoot)
 
   return {
     success: true,

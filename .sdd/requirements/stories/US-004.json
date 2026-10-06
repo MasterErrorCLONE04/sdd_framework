@@ -1,11 +1,17 @@
 {
-  "taskId": "task-US-004-uml-suite-14",
-  "storyId": "US-004",
+  "id": "US-004",
+  "epicId": "EPIC-01",
   "serviceId": "srv-node",
   "title": "Soporte completo y modelado de los 14 diagramas UML",
-  "assignedTo": "Antigravity",
+  "role": "Arquitecto / Desarrollador",
+  "action": "Incorporar y modelar los 14 diagramas UML estándar OMG en SDD Studio y en la especificación .sdd/",
+  "benefit": "Contar con cobertura exhaustiva de diseño estructural y de comportamiento tanto en la especificación como en la suite visual",
+  "points": 5,
+  "priority": "P0",
   "status": "done",
-  "completedAt": "2026-10-06T17:45:00.000Z",
+  "progress": 100,
+  "origin": "user_spec",
+  "detectedAt": "2026-10-06T17:35:00.000Z",
   "scopeFiles": [
     ".sdd/sequences/uml-diagrams.json",
     ".sdd/sequences/sequences.json",
@@ -42,8 +48,5 @@
       "then": "Se visualiza el diagrama interactivo renderizado con Mermaid, con selector rápido, metadatos y opción de copiar código",
       "done": true
     }
-  ],
-  "dispatchedAt": "2026-10-06T17:35:00.000Z",
-  "projectRoot": "C:\\Users\\Usuario\\Desktop\\sdd",
-  "instruction": "Antigravity Agent, tienes asignada la tarea US-004: 'Soporte completo y modelado de los 14 diagramas UML'. Modifica ÚNICAMENTE los archivos en scopeFiles y verifica los criterios Dado-Cuando-Entonces."
+  ]
 }

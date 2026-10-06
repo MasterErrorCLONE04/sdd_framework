@@ -5,5 +5,12 @@
     "name": "Secuencia: Arranque servidor + BD",
     "description": "Flujo mínimo de inicio y operaciones de base de datos",
     "mermaid": "sequenceDiagram\n    autonumber\n    actor D as 👨‍💻 Dev\n    participant I as 📄 index.js\n    participant S as 🖥️ server.js\n    participant DB as 🐘 BD\n    D->>I: npm start / node .\n    I->>S: Arranca servidor HTTP\n    S-->>I: Servidor escuchando\n    I->>DB: Operaciones BD\n    DB-->>I: Resultados\n    I-->>S: Respuestas\n    S-->>D: Servicio disponible"
+  },
+  {
+    "id": "UML-11-SEQUENCE",
+    "flowId": "flow-sdd-lifecycle",
+    "name": "Secuencia: Ciclo de Vida Humano-Servidor-Agente",
+    "description": "Intercambio cronológico de mensajes en el arranque de la cabina y la asignación de tareas.",
+    "mermaid": "sequenceDiagram\n    autonumber\n    actor Dev as 👨‍💻 Desarrollador\n    participant CLI as ⚡ bin/sdd.js\n    participant Srv as 🖥️ src/server.js\n    participant UI as 🎨 Studio Web UI\n    participant Agt as 🤖 Agente IA (MCP)\n    participant FS as 📁 .sdd/ Store\n    Dev->>CLI: sdd studio\n    CLI->>Srv: createSddServer(3030)\n    Srv->>FS: Cargar especificaciones atómicas\n    FS-->>Srv: project.json, stories, etc.\n    Srv-->>CLI: Servidor escuchando en puerto 3030\n    CLI->>UI: Abrir navegador en localhost:3030\n    UI->>Srv: GET /api/sdd\n    Srv-->>UI: Payload completo (12 perspectivas)\n    Agt->>Srv: MCP sdd_get_active_story\n    Srv-->>Agt: Retorna US activa y scopeFiles\n    Agt->>Srv: MCP sdd_report_progress (done: true)\n    Srv->>FS: Actualiza US en disco de forma atómica\n    Srv-->>UI: Refresca tablero Kanban y estado"
   }
 ]

@@ -1,27 +1,51 @@
 import fs from 'fs'
 import path from 'path'
 import { extractJsonFromAi } from './flows-ai.js'
-import { normalizeProjectModel, calculateProjectProgress, normalizeBusinessRule, normalizeUserFlow, normalizeBusinessFlow, normalizeTechStack, normalizeEndpoint, normalizeApiContract, normalizeDatabaseTable, normalizeDatabaseRelationship, STAGES } from './model-schema.js'
+import { normalizeProjectModel, calculateProjectProgress, normalizeBusinessRule, normalizeUserFlow, normalizeBusinessFlow, normalizeTechStack, normalizeEndpoint, normalizeApiContract, normalizeDatabaseTable, normalizeDatabaseRelationship, normalizeScreen, normalizeWireframe, normalizeDesignSystem, normalizeExecutionPhase, normalizeExecutionTask, normalizeDependencyGraph, normalizeQualityGate, STAGES } from './model-schema.js'
+import { compileAgentContext } from './agent-context.js'
 
 /**
  * Construcción de especificación de las 12 perspectivas
  * a partir de la respuesta generada por la IA de OpenRouter con datos reales.
  */
-export function buildSpecFromAi(aiData, rawText = '') {
-  const projName = aiData.projectName || 'NuevoProyecto'
-  const purpose = aiData.purpose || 'comercial'
-  const depth = aiData.depth || 'serio'
+export function buildSpecFromAi(aiData, rawText = '', existingSpec = null) {
+  const projName = aiData.projectName || existingSpec?.project?.name || existingSpec?.meta?.name || 'NuevoProyecto'
+  const purpose = aiData.purpose || existingSpec?.project?.purpose || 'comercial'
+  const depth = aiData.depth || existingSpec?.project?.depth || 'serio'
+  const currentPhase = Number(aiData.currentPhase || existingSpec?.currentPhase || (aiData.stage === 'product' ? 2 : (aiData.stage === 'requirements' ? 3 : (aiData.stage === 'ux' ? 4 : (aiData.stage === 'architecture' ? 5 : (aiData.stage === 'execution' || aiData.stage === 'ready' ? 6 : 1))))))
+  const stage = aiData.stage || existingSpec?.stage || (currentPhase === 1 ? 'discovery' : (currentPhase === 2 ? 'product' : (currentPhase === 3 ? 'requirements' : (currentPhase === 4 ? 'ux' : (currentPhase === 5 ? 'architecture' : 'execution')))))
 
-  // 1. Non-Goals definidos por la IA
+  // 0. Problema y Dolores identificados o heredados
+  const existingProblem = existingSpec?.core?.problem || existingSpec?.product?.vision?.problem
+  const problemStatement = aiData.problem?.statement || (typeof aiData.problem === 'string' ? aiData.problem : (existingProblem?.statement || (typeof existingProblem === 'string' ? existingProblem : `Resolver la automatización de ${projName}.`)))
+  const problemPainPoints = (Array.isArray(aiData.problem?.painPoints) && aiData.problem.painPoints.length > 0)
+    ? aiData.problem.painPoints.map((p, i) => ({
+        id: p.id || `p-${i + 1}`,
+        pain: p.pain || (typeof p === 'string' ? p : 'Dolor operacional no resuelto'),
+        severity: p.severity || 'alta',
+        evidence: p.evidence || 'Impacto operacional',
+        solution: p.solution || 'Flujo digitalizado directo'
+      }))
+    : (Array.isArray(existingProblem?.painPoints) && existingProblem.painPoints.length > 0
+        ? existingProblem.painPoints
+        : [
+            { id: 'p-1', pain: 'Fricción en procesos no automatizados', severity: 'alta', evidence: 'Pérdida de conversión', solution: 'Flujo digitalizado directo' }
+          ])
+
+  // 1. Non-Goals definidos por la IA o heredados de etapas anteriores
+  const existingNonGoals = existingSpec?.product?.scope?.explicitNonGoals || existingSpec?.core?.scopeBoundaries?.explicitNonGoals || []
   const nonGoals = Array.isArray(aiData.nonGoals) && aiData.nonGoals.length > 0
     ? aiData.nonGoals.map((ng, i) => ({
         id: `ng-${i + 1}`,
-        feature: ng.feature,
-        rationale: ng.rationale
+        feature: ng.feature || ng,
+        rationale: ng.rationale || 'Congelado para V2 para evitar sobre-alcance'
       }))
-    : []
+    : (existingNonGoals.length > 0
+        ? existingNonGoals.map((ng, i) => (typeof ng === 'string' ? { id: `ng-${i + 1}`, feature: ng, rationale: 'Congelado para V2' } : ng))
+        : [])
 
-  // 2. Servicios de Arquitectura definidos por la IA
+  // 2. Servicios de Arquitectura definidos por la IA o heredados
+  const existingServices = existingSpec?.architecture?.services || []
   const services = Array.isArray(aiData.services) && aiData.services.length > 0
     ? aiData.services.map((s, i) => ({
         id: `svc-${i + 1}`,
@@ -31,12 +55,15 @@ export function buildSpecFromAi(aiData, rawText = '') {
         status: 'online',
         healthPercent: 100
       }))
-    : [
-        { id: 'svc-1', label: 'Web Application & API', tech: 'Next.js 15 / TypeScript', type: 'Frontend / API', status: 'online', healthPercent: 100 },
-        { id: 'svc-2', label: 'Base de Datos Principal', tech: 'PostgreSQL 16', type: 'Database', status: 'online', healthPercent: 100 }
-      ]
+    : (existingServices.length > 0
+        ? existingServices
+        : [
+            { id: 'svc-1', label: 'Web Application & API', tech: 'Next.js 15 / TypeScript', type: 'Frontend / API', status: 'online', healthPercent: 100 },
+            { id: 'svc-2', label: 'Base de Datos Principal', tech: 'PostgreSQL 16', type: 'Database', status: 'online', healthPercent: 100 }
+          ])
 
-  // 3. Historias de Usuario Jira con Gherkin definidas por la IA
+  // 3. Historias de Usuario Jira con Gherkin definidas por la IA o heredadas
+  const existingStories = existingSpec?.requirements?.userStories || []
   const stories = Array.isArray(aiData.stories) && aiData.stories.length > 0
     ? aiData.stories.map((st, i) => ({
         id: st.id || `US-00${i + 1}`,
@@ -64,27 +91,30 @@ export function buildSpecFromAi(aiData, rawText = '') {
               { id: 'c-1', scenario: 'Verificación de requerimiento', given: 'el usuario en el sistema', when: 'opera la función', then: 'el sistema confirma', done: false }
             ]
       }))
-    : [
-        {
-          id: 'US-001',
-          epicId: 'EPIC-01',
-          title: `Configuración y Acceso a ${projName}`,
-          role: 'usuario autenticado',
-          action: 'acceder de forma segura a mi espacio de trabajo',
-          benefit: 'operar la plataforma de forma protegida',
-          points: 3,
-          priority: 'P0',
-          status: 'backlog',
-          origin: 'ai',
-          scopeFiles: ['app/**', 'src/**'],
-          businessRuleIds: ['BR-001'],
-          acceptanceCriteria: [
-            { id: 'c-1', scenario: 'Acceso seguro', given: 'un usuario con credenciales', when: 'inicia sesión', then: 'accede al dashboard principal', done: false }
-          ]
-        }
-      ]
+    : (existingStories.length > 0
+        ? existingStories
+        : [
+            {
+              id: 'US-001',
+              epicId: 'EPIC-01',
+              title: `Configuración y Acceso a ${projName}`,
+              role: 'usuario autenticado',
+              action: 'acceder de forma segura a mi espacio de trabajo',
+              benefit: 'operar la plataforma de forma protegida',
+              points: 3,
+              priority: 'P0',
+              status: 'backlog',
+              origin: 'ai',
+              scopeFiles: ['app/**', 'src/**'],
+              businessRuleIds: ['BR-001'],
+              acceptanceCriteria: [
+                { id: 'c-1', scenario: 'Acceso seguro', given: 'un usuario con credenciales', when: 'inicia sesión', then: 'accede al dashboard principal', done: false }
+              ]
+            }
+          ])
 
-  // 4. Personas / Usuarios Objetivo definidos por la IA
+  // 4. Personas / Usuarios Objetivo definidos por la IA o heredados
+  const existingPersonas = existingSpec?.product?.actors || existingSpec?.core?.targetUsers?.personas || []
   const personas = Array.isArray(aiData.targetUsers) && aiData.targetUsers.length > 0
     ? aiData.targetUsers.map((u, i) => ({
         id: u.id || `usr-${i + 1}`,
@@ -92,42 +122,50 @@ export function buildSpecFromAi(aiData, rawText = '') {
         need: u.need || 'Operar el sistema con alta eficiencia',
         frequency: u.frequency || 'Diaria'
       }))
-    : [
-        { id: 'usr-1', role: 'Usuario Final / Cliente', need: 'Acceder rápidamente al servicio', frequency: 'Recurrente' },
-        { id: 'usr-2', role: 'Administrador', need: 'Gestionar la operación y configuraciones', frequency: 'Diaria' }
-      ]
+    : (existingPersonas.length > 0
+        ? existingPersonas
+        : [
+            { id: 'usr-1', role: 'Usuario Final / Cliente', need: 'Acceder rápidamente al servicio', frequency: 'Recurrente' },
+            { id: 'usr-2', role: 'Administrador', need: 'Gestionar la operación y configuraciones', frequency: 'Diaria' }
+          ])
 
-  // 5. Modelo ERD / Base de Datos definido por la IA
-  const tables = (Array.isArray(aiData.database?.tables) && aiData.database.tables.length > 0
+  // 5. Modelo ERD / Base de Datos definido por la IA o heredado
+  const existingTables = existingSpec?.database?.tables || []
+  const rawTables = (Array.isArray(aiData.database?.tables) && aiData.database.tables.length > 0)
     ? aiData.database.tables
-    : (Array.isArray(aiData.database) && aiData.database.length > 0 ? aiData.database : [
-        {
-          id: 'tbl-01',
-          table: 'users',
-          description: 'Usuarios y credenciales del sistema',
-          columns: [
-            { name: 'id', type: 'UUID', isPk: true, notNull: true, unique: true },
-            { name: 'email', type: 'VARCHAR(255)', notNull: true, unique: true },
-            { name: 'role', type: 'VARCHAR(50)', notNull: true, default: "'user'" },
-            { name: 'created_at', type: 'TIMESTAMP', notNull: true }
-          ]
-        },
-        {
-          id: 'tbl-02',
-          table: 'items',
-          description: `Entidad operativa principal de ${projName}`,
-          columns: [
-            { name: 'id', type: 'UUID', isPk: true, notNull: true, unique: true },
-            { name: 'user_id', type: 'UUID', notNull: true },
-            { name: 'title', type: 'VARCHAR(255)', notNull: true },
-            { name: 'status', type: 'VARCHAR(50)', notNull: true, default: "'active'" },
-            { name: 'created_at', type: 'TIMESTAMP', notNull: true }
-          ],
-          foreignKeys: [
-            { column: 'user_id', referencedTable: 'users', referencedColumn: 'id' }
-          ]
-        }
-      ])).map(normalizeDatabaseTable)
+    : (Array.isArray(aiData.database) && aiData.database.length > 0
+        ? aiData.database
+        : (existingTables.length > 0
+            ? existingTables
+            : [
+                {
+                  id: 'tbl-01',
+                  table: 'users',
+                  description: 'Usuarios y credenciales del sistema',
+                  columns: [
+                    { name: 'id', type: 'UUID', isPk: true, notNull: true, unique: true },
+                    { name: 'email', type: 'VARCHAR(255)', notNull: true, unique: true },
+                    { name: 'role', type: 'VARCHAR(50)', notNull: true, default: "'user'" },
+                    { name: 'created_at', type: 'TIMESTAMP', notNull: true }
+                  ]
+                },
+                {
+                  id: 'tbl-02',
+                  table: 'items',
+                  description: `Entidad operativa principal de ${projName}`,
+                  columns: [
+                    { name: 'id', type: 'UUID', isPk: true, notNull: true, unique: true },
+                    { name: 'user_id', type: 'UUID', notNull: true },
+                    { name: 'title', type: 'VARCHAR(255)', notNull: true },
+                    { name: 'status', type: 'VARCHAR(50)', notNull: true, default: "'active'" },
+                    { name: 'created_at', type: 'TIMESTAMP', notNull: true }
+                  ],
+                  foreignKeys: [
+                    { column: 'user_id', referencedTable: 'users', referencedColumn: 'id' }
+                  ]
+                }
+              ]))
+  const tables = rawTables.map(normalizeDatabaseTable)
 
   const relationships = (Array.isArray(aiData.database?.relationships) && aiData.database.relationships.length > 0
     ? aiData.database.relationships
@@ -194,10 +232,8 @@ export function buildSpecFromAi(aiData, rawText = '') {
     },
     core: {
       problem: {
-        statement: aiData.problem?.statement || (typeof aiData.problem === 'string' ? aiData.problem : `Resolver la automatización de ${projName}.`),
-        painPoints: Array.isArray(aiData.problem?.painPoints) ? aiData.problem.painPoints : [
-          { id: 'p-1', pain: 'Fricción en procesos no automatizados', severity: 'alta', evidence: 'Pérdida de conversión', solution: 'Flujo digitalizado directo' }
-        ]
+        statement: problemStatement,
+        painPoints: problemPainPoints
       },
       scopeBoundaries: {
         explicitNonGoals: nonGoals
@@ -315,64 +351,98 @@ export function buildSpecFromAi(aiData, rawText = '') {
     ],
     uiUx: {
       screens: Array.isArray(aiData.screens) && aiData.screens.length > 0
-        ? aiData.screens.map((sc, i) => ({
+        ? aiData.screens.map((sc, i) => normalizeScreen({
             id: sc.id || `SCR-${String(i + 1).padStart(2, '0')}`,
             name: sc.name || `Pantalla ${i + 1}`,
             route: sc.route || (i === 0 ? '/' : `/${(sc.name || `pantalla-${i + 1}`).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`),
-            description: sc.description || 'Vista estructurada de la interfaz de usuario',
-            layout: sc.layout || 'standard-app',
-            status: 'planned',
-            healthPercent: 100,
-            checklist: Array.isArray(sc.checklist) ? sc.checklist : [
-              { id: `chk-${i}-1`, text: `Renderizar layout principal de ${sc.name || 'la pantalla'}`, done: false },
-              { id: `chk-${i}-2`, text: 'Validar estados reactivos y manejo de errores', done: false }
-            ]
-          }))
-        : [
-            {
-              id: 'SCR-01',
-              name: 'Dashboard Principal',
-              route: '/',
-              description: `Vista principal y centro de mando interactivo para ${projName}.`,
-              layout: 'standard-app',
-              status: 'planned',
-              healthPercent: 100,
-              checklist: [
-                { id: 'chk-1-1', text: 'Renderizar vista principal con componentes clave', done: false },
-                { id: 'chk-1-2', text: 'Probar navegación y acciones del usuario', done: false }
-              ]
-            }
-          ]
+            actor: sc.actor || personas[0]?.role || 'Usuario',
+            purpose: sc.purpose || sc.description || `Vista estructurada de interfaz para ${sc.name || 'la aplicación'}`,
+            components: Array.isArray(sc.components) ? sc.components : ['Header', 'MainContent', 'Footer'],
+            states: sc.states || {
+              loading: 'Skeleton loader activo durante la obtención de datos.',
+              empty: 'Sin datos disponibles. Sugerir acción inicial.',
+              error: 'Mensaje de error y botón de reintento.',
+              success: 'Vista interactiva y datos cargados.'
+            },
+            dataRequired: Array.isArray(sc.dataRequired) ? sc.dataRequired : (tables[0]?.table ? [tables[0].table] : []),
+            relatedFlows: Array.isArray(sc.relatedFlows) ? sc.relatedFlows : ['01-flujo-principal'],
+            relatedStories: Array.isArray(sc.relatedStories) ? sc.relatedStories : (stories[0]?.id ? [stories[0].id] : []),
+            layout: sc.layout || 'standard-app'
+          }, i))
+        : ((existingSpec?.uiUx?.screens?.length > 0)
+            ? existingSpec.uiUx.screens
+            : [
+                normalizeScreen({
+                  id: 'SCR-01',
+                  name: 'Dashboard Principal',
+                  route: '/',
+                  actor: personas[0]?.role || 'Usuario',
+                  purpose: `Centro de control interactivo para ${projName}.`,
+                  components: ['Navbar', 'Sidebar', 'MetricCard', 'DataTable'],
+                  states: {
+                    loading: 'Skeleton de métricas cargando.',
+                    empty: 'Sin registros iniciales.',
+                    error: 'Error al conectar con la API central.',
+                    success: 'Panel principal activo.'
+                  },
+                  dataRequired: tables.map(t => t.table).slice(0, 2),
+                  relatedFlows: ['01-flujo-principal'],
+                  relatedStories: stories.slice(0, 2).map(s => s.id)
+                }, 0)
+              ]),
+      wireframes: Array.isArray(aiData.wireframes) && aiData.wireframes.length > 0
+        ? aiData.wireframes.map(normalizeWireframe)
+        : ((existingSpec?.uiUx?.wireframes?.length > 0)
+            ? existingSpec.uiUx.wireframes
+            : [
+                normalizeWireframe({
+                  id: 'WF-01',
+                  screenId: 'SCR-01',
+                  title: `Wireframe: Dashboard de ${projName}`,
+                  layout: 'dashboard',
+                  blocks: [
+                    { id: 'blk-nav', type: 'navbar', title: 'Barra Superior', properties: { brand: projName, links: ['Inicio', 'Módulos', 'Ajustes'] } },
+                    { id: 'blk-side', type: 'sidebar', title: 'Menú Lateral', properties: { items: ['Dashboard', 'Operaciones', 'Historial'] } },
+                    { id: 'blk-stats', type: 'stats-grid', title: 'Métricas Clave', properties: { items: [{ label: 'Total', value: '1,280' }, { label: 'Salud', value: '100%' }] } },
+                    { id: 'blk-table', type: 'table', title: 'Registros Recientes', properties: { columns: ['ID', 'Nombre', 'Estado', 'Fecha'] } },
+                    { id: 'blk-act', type: 'actions', title: 'Acciones Rápidas', properties: { buttons: ['Crear Registro', 'Exportar'] } }
+                  ]
+                }, 0)
+              ]),
+      designSystem: normalizeDesignSystem(aiData.designSystem || existingSpec?.uiUx?.designSystem || {}),
+      components: Array.isArray(aiData.components) ? aiData.components : (existingSpec?.uiUx?.components || [
+        'Navbar', 'Sidebar', 'MetricCard', 'DataTable', 'ModalDialog', 'ToastNotification'
+      ])
     },
     discovery: {
       interviewSessions: buildDiscoveryInterviews(projName, purpose, depth, services)
     },
     product: {
       vision: {
-        problem: aiData.problem?.statement || (typeof aiData.problem === 'string' ? aiData.problem : `Resolver la automatización de ${projName}.`),
+        problem: aiData.problem?.statement || (typeof aiData.problem === 'string' ? aiData.problem : (existingSpec?.core?.problem?.statement || existingSpec?.product?.vision?.problem || `Resolver la automatización de ${projName}.`)),
         targetAudience: personas[0]?.role || 'Usuarios principales del sistema',
-        valueProposition: aiData.tagline || `Plataforma ${projName} gobernada bajo protocolo SDD`,
-        coreGoals: Array.isArray(aiData.problem?.painPoints) ? aiData.problem.painPoints.map(p => p.pain || p) : [],
-        successMetrics: Array.isArray(aiData.successCriteria?.metrics) ? aiData.successCriteria.metrics : []
+        valueProposition: aiData.tagline || existingSpec?.product?.vision?.valueProposition || `Plataforma ${projName} gobernada bajo protocolo SDD`,
+        coreGoals: Array.isArray(aiData.problem?.painPoints) && aiData.problem.painPoints.length > 0 ? aiData.problem.painPoints.map(p => p.pain || p) : (existingSpec?.product?.vision?.coreGoals || []),
+        successMetrics: Array.isArray(aiData.successCriteria?.metrics) ? aiData.successCriteria.metrics : (existingSpec?.product?.vision?.successMetrics || [])
       },
       scope: {
-        inScopeV1: Array.isArray(aiData.inScopeV1) ? aiData.inScopeV1 : ['Funcionalidad mínima viable para V1'],
+        inScopeV1: (Array.isArray(aiData.inScopeV1) && aiData.inScopeV1.length > 0) ? aiData.inScopeV1 : (existingSpec?.product?.scope?.inScopeV1 || ['Funcionalidad mínima viable para V1']),
         explicitNonGoals: nonGoals.map(ng => ng.feature || ng),
-        futureBacklog: Array.isArray(aiData.futureBacklog) ? aiData.futureBacklog : []
+        futureBacklog: Array.isArray(aiData.futureBacklog) ? aiData.futureBacklog : (existingSpec?.product?.scope?.futureBacklog || [])
       },
       actors: personas,
-      modules: Array.isArray(aiData.modules) ? aiData.modules : [
+      modules: (Array.isArray(aiData.modules) && aiData.modules.length > 0) ? aiData.modules : (existingSpec?.product?.modules || [
         { id: 'mod-1', name: 'Gestión Principal', description: `Núcleo de operaciones de ${projName}` }
-      ]
+      ])
     },
-    businessRules: Array.isArray(aiData.businessRules) ? aiData.businessRules.map((br, i) => ({
+    businessRules: (Array.isArray(aiData.businessRules) && aiData.businessRules.length > 0) ? aiData.businessRules.map((br, i) => ({
       id: br.id || `BR-${String(i + 1).padStart(3, '0')}`,
       code: br.code || `BR-${String(i + 1).padStart(3, '0')}`,
       rule: br.rule || br.title || br.description,
       category: br.category || 'Business Logic',
       enforcedAt: br.enforcedAt || ['api', 'ui']
-    })) : [],
-    stack: normalizeTechStack(aiData.stack || {
+    })) : (existingSpec?.businessRules || []),
+    stack: normalizeTechStack(aiData.stack || existingSpec?.stack || {
       frontend: { framework: 'Modern Web / Vanilla / Vite', language: 'JavaScript / TypeScript', styling: 'Vanilla CSS / Tailwind' },
       backend: { framework: 'Node.js REST API', runtime: 'Node >= 18', architecturePattern: 'Layered Services' },
       database: { engine: 'PostgreSQL 16 / SQLite', orm: 'Prisma / SQL' },
@@ -380,12 +450,12 @@ export function buildSpecFromAi(aiData, rawText = '') {
       deployment: { target: 'Local / Docker', ciCd: 'GitHub Actions' }
     }),
     api: {
-      endpoints: (Array.isArray(aiData.endpoints) && aiData.endpoints.length > 0 ? aiData.endpoints : [
+      endpoints: ((Array.isArray(aiData.endpoints) && aiData.endpoints.length > 0) ? aiData.endpoints : (existingSpec?.api?.endpoints || [
         { id: 'api-01', method: 'GET', path: '/api/v1/health', summary: 'Healthcheck del servicio', actor: 'public', statusCodes: [200] },
         { id: 'api-02', method: 'GET', path: '/api/v1/items', summary: `Listar elementos de ${projName}`, actor: 'user', requestDto: null, responseDto: 'ItemsListDTO', relatedStoryIds: stories.slice(0, 1).map(s => s.id) },
         { id: 'api-03', method: 'POST', path: '/api/v1/items', summary: `Crear elemento en ${projName}`, actor: 'user', requestDto: 'CreateItemDTO', responseDto: 'ItemDetailDTO', relatedRuleIds: ['BR-001'], relatedStoryIds: stories.slice(0, 1).map(s => s.id) }
-      ]).map(normalizeEndpoint),
-      contracts: (Array.isArray(aiData.apiContracts || aiData.contracts) && (aiData.apiContracts || aiData.contracts).length > 0 ? (aiData.apiContracts || aiData.contracts) : [
+      ])).map(normalizeEndpoint),
+      contracts: ((Array.isArray(aiData.apiContracts || aiData.contracts) && (aiData.apiContracts || aiData.contracts).length > 0) ? (aiData.apiContracts || aiData.contracts) : (existingSpec?.api?.contracts || [
         {
           id: 'dto-01',
           name: 'CreateItemDTO',
@@ -406,24 +476,44 @@ export function buildSpecFromAi(aiData, rawText = '') {
             { name: 'createdAt', type: 'string', required: true, description: 'Marca temporal ISO' }
           ]
         }
-      ]).map(normalizeApiContract)
+      ])).map(normalizeApiContract)
     },
     execution: {
-      phases: [
-        { id: 'phase-1', name: 'Fase 1: Configuración & Base de Datos', order: 1, status: 'planned', taskIds: [] },
-        { id: 'phase-2', name: 'Fase 2: Lógica de Negocio & API', order: 2, status: 'planned', taskIds: [] },
-        { id: 'phase-3', name: 'Fase 3: Interfaz Web & Integración', order: 3, status: 'planned', taskIds: [] }
-      ],
-      tasks: stories.map((st) => ({
+      phases: ((Array.isArray(aiData.phases) && aiData.phases.length > 0) ? aiData.phases : (existingSpec?.execution?.phases || [
+        normalizeExecutionPhase({ id: 'phase-1', name: 'Fase 1: Configuración & Modelos Base', order: 1, status: 'planned', taskIds: stories.slice(0, 1).map(s => `task-${s.id}`) }, 0),
+        normalizeExecutionPhase({ id: 'phase-2', name: 'Fase 2: Lógica Central & Endpoints API', order: 2, status: 'planned', taskIds: stories.slice(1, 3).map(s => `task-${s.id}`) }, 1),
+        normalizeExecutionPhase({ id: 'phase-3', name: 'Fase 3: Interfaz & Experiencia UX', order: 3, status: 'planned', taskIds: stories.slice(3).map(s => `task-${s.id}`) }, 2),
+        normalizeExecutionPhase({ id: 'phase-4', name: 'Fase 4: Verificación & Cierre SDD', order: 4, status: 'planned', taskIds: [] }, 3)
+      ])),
+      tasks: ((Array.isArray(aiData.tasks) && aiData.tasks.length > 0) ? aiData.tasks : (existingSpec?.execution?.tasks || stories.map((st, i) => normalizeExecutionTask({
         id: `task-${st.id}`,
         storyId: st.id,
+        phaseId: i === 0 ? 'phase-1' : (i < 3 ? 'phase-2' : 'phase-3'),
         title: st.title,
         status: 'planned',
         scopeFiles: st.scopeFiles || ['src/**'],
-        acceptanceCriteria: st.acceptanceCriteria || []
-      }))
+        dependencies: i > 0 ? [`task-${stories[i - 1].id}`] : [],
+        acceptanceCriteria: st.acceptanceCriteria || [],
+        estimatedDifficulty: i === 0 ? 'low' : (i < 3 ? 'medium' : 'high')
+      }, i)))),
+      dependencies: normalizeDependencyGraph({}, stories.map((st, i) => ({
+        id: `task-${st.id}`,
+        dependencies: i > 0 ? [`task-${stories[i - 1].id}`] : []
+      })))
     },
-    stage: aiData.stage || (aiData.currentPhase === 1 ? 'discovery' : (aiData.currentPhase === 2 ? 'product' : 'requirements'))
+    governance: {
+      qualityGates: [
+        normalizeQualityGate({ id: 'gate-problem', name: 'Definición de Problema & Valor', stage: 'discovery', status: 'approved' }, 0),
+        normalizeQualityGate({ id: 'gate-scope', name: 'Límites de Alcance & Non-Goals', stage: 'product', status: 'approved' }, 1),
+        normalizeQualityGate({ id: 'gate-requirements', name: 'Historias con Criterios Gherkin', stage: 'requirements', status: 'approved' }, 2),
+        normalizeQualityGate({ id: 'gate-architecture', name: 'Topología & Base de Datos', stage: 'architecture', status: 'approved' }, 3),
+        normalizeQualityGate({ id: 'gate-tasks', name: 'Plan de Tareas con Scope Shield', stage: 'execution', status: 'approved' }, 4)
+      ]
+    },
+    stage,
+    currentPhase,
+    phaseTitle: aiData.phaseTitle || `Etapa ${currentPhase}: ${stage}`,
+    readyToScaffold: Boolean(aiData.readyToScaffold || currentPhase >= 6 || stage === 'ready')
   }
 }
 
@@ -707,10 +797,16 @@ export function persistGenesisStage(projectRoot, stage, stageData = {}) {
 
     case 'ux': {
       if (stageData.screens) {
-        fs.writeFileSync(path.join(uiDir, 'screens.json'), JSON.stringify(stageData.screens, null, 2), 'utf-8')
+        fs.writeFileSync(path.join(uiDir, 'screens.json'), JSON.stringify(stageData.screens.map(normalizeScreen), null, 2), 'utf-8')
       }
       if (stageData.wireframes) {
-        fs.writeFileSync(path.join(uiDir, 'wireframes.json'), JSON.stringify(stageData.wireframes, null, 2), 'utf-8')
+        fs.writeFileSync(path.join(uiDir, 'wireframes.json'), JSON.stringify(stageData.wireframes.map(normalizeWireframe), null, 2), 'utf-8')
+      }
+      if (stageData.designSystem) {
+        fs.writeFileSync(path.join(uiDir, 'design-system.json'), JSON.stringify(normalizeDesignSystem(stageData.designSystem), null, 2), 'utf-8')
+      }
+      if (stageData.components) {
+        fs.writeFileSync(path.join(uiDir, 'components.json'), JSON.stringify(stageData.components, null, 2), 'utf-8')
       }
       project.stage = 'execution'
       project.progress = Math.max(project.progress || 0, 90)
@@ -718,12 +814,19 @@ export function persistGenesisStage(projectRoot, stage, stageData = {}) {
     }
 
     case 'execution': {
-      if (stageData.tasks) {
-        fs.writeFileSync(path.join(execDir, 'tasks.json'), JSON.stringify(stageData.tasks, null, 2), 'utf-8')
-      }
       if (stageData.phases) {
-        fs.writeFileSync(path.join(execDir, 'phases.json'), JSON.stringify(stageData.phases, null, 2), 'utf-8')
+        fs.writeFileSync(path.join(execDir, 'phases.json'), JSON.stringify(stageData.phases.map(normalizeExecutionPhase), null, 2), 'utf-8')
       }
+      if (stageData.tasks) {
+        fs.writeFileSync(path.join(execDir, 'tasks.json'), JSON.stringify(stageData.tasks.map(normalizeExecutionTask), null, 2), 'utf-8')
+      }
+      if (stageData.dependencies) {
+        fs.writeFileSync(path.join(execDir, 'dependencies.json'), JSON.stringify(normalizeDependencyGraph(stageData.dependencies, stageData.tasks || []), null, 2), 'utf-8')
+      }
+      if (stageData.qualityGates) {
+        fs.writeFileSync(path.join(govDir, 'quality-gates.json'), JSON.stringify(stageData.qualityGates.map(normalizeQualityGate), null, 2), 'utf-8')
+      }
+      compileAgentContext(projectRoot)
       project.stage = 'ready'
       project.progress = 100
       break
@@ -771,12 +874,13 @@ export function scaffoldGenesis(projectRoot, genesisPayload) {
   })
 
   // 1. project.json (V2 con stage tracking)
+  const proj = genesisPayload.project || genesisPayload || {}
   const projectData = {
-    name: genesisPayload.project.name,
-    tagline: genesisPayload.project.tagline,
-    purpose: genesisPayload.project.purpose,
-    depth: genesisPayload.project.depth,
-    targetLaunchWeeks: genesisPayload.project.targetLaunchWeeks,
+    name: proj.name || path.basename(projectRoot),
+    tagline: proj.tagline || '',
+    purpose: proj.purpose || '',
+    depth: proj.depth || 'mvp',
+    targetLaunchWeeks: proj.targetLaunchWeeks || 4,
     version: '1.0.0',
     status: 'ready',
     stage: 'ready',
@@ -784,7 +888,7 @@ export function scaffoldGenesis(projectRoot, genesisPayload) {
     completedStages: ['discovery', 'product', 'requirements', 'flows', 'architecture', 'database', 'api', 'ux', 'execution', 'validation', 'ready'],
     activeSprint: 'Sprint 1',
     lastUpdated: new Date().toISOString(),
-    qualityGates: genesisPayload.project.qualityGates
+    qualityGates: proj.qualityGates || []
   }
   fs.writeFileSync(path.join(sddDir, 'project.json'), JSON.stringify(projectData, null, 2), 'utf-8')
 
@@ -811,24 +915,24 @@ export function scaffoldGenesis(projectRoot, genesisPayload) {
   fs.writeFileSync(path.join(productDir, 'actors.json'), JSON.stringify(actorsData, null, 2), 'utf-8')
 
   const modulesData = genesisPayload.product?.modules || [
-    { id: 'mod-1', name: 'Módulo Principal', description: `Núcleo de operaciones de ${genesisPayload.project.name}` }
+    { id: 'mod-1', name: 'Módulo Principal', description: `Núcleo de operaciones de ${proj.name}` }
   ]
   fs.writeFileSync(path.join(productDir, 'modules.json'), JSON.stringify(modulesData, null, 2), 'utf-8')
 
   // 2. core/problem.json
-  fs.writeFileSync(path.join(coreDir, 'problem.json'), JSON.stringify(genesisPayload.core.problem, null, 2), 'utf-8')
+  fs.writeFileSync(path.join(coreDir, 'problem.json'), JSON.stringify(genesisPayload.core?.problem || { statement: proj.purpose || '' }, null, 2), 'utf-8')
 
   // 3. core/scope-boundaries.json
-  fs.writeFileSync(path.join(coreDir, 'scope-boundaries.json'), JSON.stringify(genesisPayload.core.scopeBoundaries, null, 2), 'utf-8')
+  fs.writeFileSync(path.join(coreDir, 'scope-boundaries.json'), JSON.stringify(genesisPayload.core?.scopeBoundaries || { inScope: ['MVP V1'], outOfScope: [] }, null, 2), 'utf-8')
 
   // 4. core/target-user.json
-  fs.writeFileSync(path.join(coreDir, 'target-user.json'), JSON.stringify(genesisPayload.core.targetUsers, null, 2), 'utf-8')
+  fs.writeFileSync(path.join(coreDir, 'target-user.json'), JSON.stringify(genesisPayload.core?.targetUsers || { personas: [{ role: 'Usuario' }] }, null, 2), 'utf-8')
 
   // 5. core/success-criteria.json
-  fs.writeFileSync(path.join(coreDir, 'success-criteria.json'), JSON.stringify(genesisPayload.core.successCriteria, null, 2), 'utf-8')
+  fs.writeFileSync(path.join(coreDir, 'success-criteria.json'), JSON.stringify(genesisPayload.core?.successCriteria || { criteria: [] }, null, 2), 'utf-8')
 
   // 6. core/risks.json
-  fs.writeFileSync(path.join(coreDir, 'risks.json'), JSON.stringify(genesisPayload.core.risks || {}, null, 2), 'utf-8')
+  fs.writeFileSync(path.join(coreDir, 'risks.json'), JSON.stringify(genesisPayload.core?.risks || {}, null, 2), 'utf-8')
 
   // 7. requirements/stories/US-*.json (1 archivo por historia)
   const stories = genesisPayload.requirements?.userStories || []
@@ -861,10 +965,10 @@ export function scaffoldGenesis(projectRoot, genesisPayload) {
   })
 
   // 11. architecture.json & architecture/stack.json
-  fs.writeFileSync(path.join(sddDir, 'architecture.json'), JSON.stringify(genesisPayload.architecture, null, 2), 'utf-8')
+  fs.writeFileSync(path.join(sddDir, 'architecture.json'), JSON.stringify(genesisPayload.architecture || {}, null, 2), 'utf-8')
   const stackData = normalizeTechStack(genesisPayload.architecture?.stack || genesisPayload.stack)
   fs.writeFileSync(path.join(archDir, 'stack.json'), JSON.stringify(stackData, null, 2), 'utf-8')
-  fs.writeFileSync(path.join(archDir, 'architecture.json'), JSON.stringify(genesisPayload.architecture, null, 2), 'utf-8')
+  fs.writeFileSync(path.join(archDir, 'architecture.json'), JSON.stringify(genesisPayload.architecture || {}, null, 2), 'utf-8')
 
   // 11.5 api/endpoints.json & api/contracts.json
   const endpointsData = (genesisPayload.api?.endpoints || genesisPayload.endpoints || [
@@ -884,32 +988,39 @@ export function scaffoldGenesis(projectRoot, genesisPayload) {
   const relsData = rawRels.map(normalizeDatabaseRelationship)
   fs.writeFileSync(path.join(dbDir, 'relationships.json'), JSON.stringify(relsData, null, 2), 'utf-8')
 
-  // 12.5 execution/ (phases.json, tasks.json)
-  const phasesData = genesisPayload.execution?.phases || [
-    { id: 'phase-1', name: 'Fase 1: Configuración & Base de Datos', order: 1, status: 'planned' },
-    { id: 'phase-2', name: 'Fase 2: Lógica de Negocio & API', order: 2, status: 'planned' },
-    { id: 'phase-3', name: 'Fase 3: Interfaz Web & Integración', order: 3, status: 'planned' }
-  ]
+  // 12.5 execution/ (phases.json, tasks.json, dependencies.json)
+  const phasesData = (genesisPayload.execution?.phases || [
+    { id: 'phase-1', name: 'Fase 1: Configuración & Modelos Base', order: 1, status: 'planned', taskIds: stories.slice(0, 1).map(s => `task-${s.id}`) },
+    { id: 'phase-2', name: 'Fase 2: Lógica Central & Endpoints API', order: 2, status: 'planned', taskIds: stories.slice(1, 3).map(s => `task-${s.id}`) },
+    { id: 'phase-3', name: 'Fase 3: Interfaz & Experiencia UX', order: 3, status: 'planned', taskIds: stories.slice(3).map(s => `task-${s.id}`) },
+    { id: 'phase-4', name: 'Fase 4: Verificación & Cierre SDD', order: 4, status: 'planned', taskIds: [] }
+  ]).map(normalizeExecutionPhase)
   fs.writeFileSync(path.join(execDir, 'phases.json'), JSON.stringify(phasesData, null, 2), 'utf-8')
 
-  const tasksData = genesisPayload.execution?.tasks || stories.map(st => ({
+  const tasksData = (genesisPayload.execution?.tasks || stories.map((st, i) => ({
     id: `task-${st.id}`,
     storyId: st.id,
+    phaseId: i === 0 ? 'phase-1' : (i < 3 ? 'phase-2' : 'phase-3'),
     title: st.title,
     status: 'planned',
     scopeFiles: st.scopeFiles || ['src/**'],
-    acceptanceCriteria: st.acceptanceCriteria || []
-  }))
+    dependencies: i > 0 ? [`task-${stories[i - 1].id}`] : [],
+    acceptanceCriteria: st.acceptanceCriteria || [],
+    estimatedDifficulty: i === 0 ? 'low' : (i < 3 ? 'medium' : 'high')
+  }))).map(normalizeExecutionTask)
   fs.writeFileSync(path.join(execDir, 'tasks.json'), JSON.stringify(tasksData, null, 2), 'utf-8')
 
+  const depsData = normalizeDependencyGraph(genesisPayload.execution?.dependencies || {}, tasksData)
+  fs.writeFileSync(path.join(execDir, 'dependencies.json'), JSON.stringify(depsData, null, 2), 'utf-8')
+
   // 12.8 governance/quality-gates.json
-  const gatesData = [
+  const gatesData = (genesisPayload.governance?.qualityGates || [
     { id: 'gate-problem', name: 'Definición de Problema & Valor', stage: 'discovery', status: 'approved' },
     { id: 'gate-scope', name: 'Límites de Alcance & Non-Goals', stage: 'product', status: 'approved' },
     { id: 'gate-requirements', name: 'Historias con Criterios Gherkin', stage: 'requirements', status: 'approved' },
     { id: 'gate-architecture', name: 'Topología & Base de Datos', stage: 'architecture', status: 'approved' },
     { id: 'gate-tasks', name: 'Plan de Tareas con Scope Shield', stage: 'execution', status: 'approved' }
-  ]
+  ]).map(normalizeQualityGate)
   fs.writeFileSync(path.join(govDir, 'quality-gates.json'), JSON.stringify(gatesData, null, 2), 'utf-8')
 
   // 13. sequences/sequences.json & state-machines.json
@@ -919,46 +1030,21 @@ export function scaffoldGenesis(projectRoot, genesisPayload) {
     fs.writeFileSync(path.join(seqDir, 'state-machines.json'), JSON.stringify(genesisPayload.stateMachines, null, 2), 'utf-8')
   }
 
-  // 14. ui-ux/screens.json
+  // 14. ui-ux/ (screens.json, wireframes.json, design-system.json, components.json)
   fs.writeFileSync(path.join(uiDir, 'screens.json'), JSON.stringify(genesisPayload.uiUx?.screens || [], null, 2), 'utf-8')
+  fs.writeFileSync(path.join(uiDir, 'wireframes.json'), JSON.stringify(genesisPayload.uiUx?.wireframes || [], null, 2), 'utf-8')
+  fs.writeFileSync(path.join(uiDir, 'design-system.json'), JSON.stringify(genesisPayload.uiUx?.designSystem || normalizeDesignSystem(), null, 2), 'utf-8')
+  fs.writeFileSync(path.join(uiDir, 'components.json'), JSON.stringify(genesisPayload.uiUx?.components || [], null, 2), 'utf-8')
 
   // 15. discovery/interviews.json
-  fs.writeFileSync(path.join(discDir, 'interviews.json'), JSON.stringify(genesisPayload.discovery, null, 2), 'utf-8')
+  fs.writeFileSync(path.join(discDir, 'interviews.json'), JSON.stringify(genesisPayload.discovery || [], null, 2), 'utf-8')
 
-  // 16. AGENTS.md
-  const nonGoalsText = genesisPayload.core.scopeBoundaries.explicitNonGoals.map(ng => `- 🚫 **${ng.feature}:** ${ng.rationale}`).join('\n')
-  const agentsMdContent = `# Protocolo SDD (Spec-Driven Development) — "Single Source of Truth"
-
-Proyecto: **${genesisPayload.project.name}**
-Propósito: \`${genesisPayload.project.purpose}\` | Profundidad: \`${genesisPayload.project.depth}\`
-
-Cualquier agente de IA (Antigravity, Cursor, Windsurf, Claude Code, Copilot) que trabaje en este repositorio DEBE acatar estrictamente las siguientes reglas:
-
-0. **Compuertas de Calidad & Non-Goals:**
-   - Consulta \`.sdd/project.json\` antes de escribir código.
-   - Lee \`.sdd/core/scope-boundaries.json\`: NUNCA programes features congeladas para V2:
-${nonGoalsText}
-
-1. **Lectura Previa Obligatoria:**
-   - Consulta la Historia activa en \`.sdd/requirements/stories/<US-ID>.json\`.
-   - Identifica el objetivo técnico y la lista blanca de archivos \`scopeFiles\`.
-
-2. **Aislamiento de Alcance (Scope Protection):**
-   - Modifica ÚNICAMENTE los archivos declarados en \`scopeFiles\` de la historia activa. Está prohibido alterar código fuera de alcance sin orden humana previa.
-
-3. **Criterios de Aceptación Gherkin (Dado-Cuando-Entonces):**
-   - Verifica cada criterio de aceptación contra el código y tests reales.
-   - Marca \`"done": true\` en el archivo \`.sdd/requirements/stories/<US-ID>.json\` conforme los cumplas.
-
-4. **Actualización Atómica del Estado:**
-   - Trabaja sobre el archivo individual de la entidad para evitar conflictos de merge.
-   - Cuando todos los criterios estén verificados, actualiza \`"status": "done"\` y firma en \`"assignedTo": "NombreAgente"\`.
-`
-  fs.writeFileSync(path.join(projectRoot, 'AGENTS.md'), agentsMdContent, 'utf-8')
+  // 16. Compilar Contexto Agéntico y generar AGENTS.md dinámicamente
+  compileAgentContext(projectRoot)
 
   return {
     success: true,
-    projectName: genesisPayload.project.name,
+    projectName: proj.name,
     storiesCount: stories.length,
     sddDir
   }
@@ -1068,6 +1154,247 @@ export async function callOpenRouter({ apiKey, model, messages = [], systemPromp
 }
 
 /**
+ * Retorna las instrucciones pedagógicas y el esquema JSON específico para la etapa activa.
+ */
+export function getStagePromptInstructions(activeStage, currentPhase) {
+  switch (activeStage) {
+    case 'discovery':
+      return `
+ETAPA ACTIVA: 1/6 — "DISCOVERY: PROBLEMA RAÍZ, DOLORES Y AUDIENCIA"
+Tu objetivo de ingeniería en esta etapa:
+- Comprender a fondo el dolor o necesidad que motiva el proyecto.
+- NO propongas aún pantallas finales, bases de datos complejas ni tareas de desarrollo. Concéntrate en el POR QUÉ y PARA QUIÉN.
+- Desglosa al menos 2 dolores reales ("painPoints") con severidad ("alta" o "media") y cómo el software los resuelve.
+- Define con claridad 2 arquetipos de usuario ("targetUsers") con rol, necesidad y frecuencia.
+- Propón un nombre de proyecto memorable y un tagline inspirador.
+- En tu texto conversacional en Markdown:
+  * Saluda como mentor e introduce el propósito de clarificar el problema antes de escribir código.
+  * Presenta de forma estructurada tu entendimiento del problema y la audiencia.
+  * Haz 2 preguntas reflexivas para que el usuario precise detalles o indícale que si está conforme, puede confirmar para avanzar a la Etapa 2 (Alcance V1 & Non-Goals).
+FORMATO JSON ESPERADO EN ESTA ETAPA (bloque \`\`\`json):
+{
+  "stage": "discovery",
+  "currentPhase": 1,
+  "phaseTitle": "Etapa 1: Problema Raíz & Audiencia",
+  "projectName": "NombreDelSoftware",
+  "tagline": "Eslogan conciso y profesional",
+  "problem": {
+    "statement": "Definición clara y fundamentada del problema raíz",
+    "painPoints": [
+      { "id": "p-1", "pain": "Dolor específico", "severity": "alta", "evidence": "Impacto real", "solution": "Cómo lo resuelve el software" }
+    ]
+  },
+  "targetUsers": [
+    { "id": "usr-1", "role": "Rol de usuario", "need": "Necesidad concreta", "frequency": "Diaria|Recurrente" }
+  ],
+  "suggestedActions": [
+    "Confirmar y avanzar a Etapa 2: Alcance & Non-Goals",
+    "Ajustar dolor principal",
+    "Agregar otro tipo de usuario"
+  ]
+}`
+
+    case 'product':
+      return `
+ETAPA ACTIVA: 2/6 — "PRODUCT: MÓDULOS MACRO, ALCANCE V1 Y NON-GOALS (SCOPE SHIELD)"
+Tu objetivo de ingeniería en esta etapa:
+- Delimitar rigurosamente los límites de la V1 para blindar el proyecto contra el sobre-alcance ("scope creep").
+- Agrupar la solución en 3 a 5 módulos macro ("modules") con nombres claros y qué resuelve cada uno.
+- Definir qué funcionalidades están estrictamente DENTRO de la V1 ("inScopeV1").
+- Definir al menos 3 funcionalidades que quedan estrictamente FUERA o CONGELADAS para la V2 ("nonGoals") con su justificación estratégica de ingeniería ("rationale").
+- En tu texto conversacional en Markdown:
+  * Explica pedagógicamente por qué definir lo que NO se va a construir es la mejor práctica de arquitectura para entregar rápido y con calidad.
+  * Presenta los módulos propuestos, lo que entra en V1 y lo congelado para V2.
+  * Pregunta al usuario si está de acuerdo con estos límites o si desea mover alguna función entre V1 y V2.
+FORMATO JSON ESPERADO EN ESTA ETAPA (bloque \`\`\`json):
+{
+  "stage": "product",
+  "currentPhase": 2,
+  "phaseTitle": "Etapa 2: Alcance V1 & Non-Goals",
+  "modules": [
+    { "id": "mod-1", "name": "Nombre Módulo", "description": "Qué resuelve este módulo" }
+  ],
+  "inScopeV1": ["Funcionalidad imprescindible para V1"],
+  "nonGoals": [
+    { "feature": "Funcionalidad congelada para V2", "rationale": "Justificación estratégica de ingeniería" }
+  ],
+  "suggestedActions": [
+    "Aprobar alcance y avanzar a Etapa 3: Historias & Gherkin",
+    "Mover funcionalidad a Non-Goals V2",
+    "Agregar módulo adicional"
+  ]
+}`
+
+    case 'requirements':
+      return `
+ETAPA ACTIVA: 3/6 — "REQUIREMENTS: HISTORIAS DE USUARIO JIRA Y CRITERIOS GHERKIN"
+Tu objetivo de ingeniería en esta etapa:
+- Desglosar los módulos y el alcance en Historias de Usuario formales en formato Jira: "Como [rol], quiero [acción], para [beneficio]".
+- Asignar prioridad (P0, P1), puntos estimados (1, 2, 3, 5) y archivos tentativos en scopeFiles.
+- OBLIGATORIO: Cada historia DEBE incluir al menos 1 o 2 Criterios de Aceptación formales con sintaxis Gherkin Dado-Cuando-Entonces ("scenario", "given", "when", "then").
+- Definir al menos 2 Reglas de Negocio transversales ("businessRules": BR-001, BR-002...) que apliquen validaciones lógicas.
+- En tu texto conversacional en Markdown:
+  * Explica cómo los criterios Gherkin permiten a los agentes autónomos de IA probar y verificar su propio código sin ambigüedades.
+  * Presenta las historias y reglas de negocio estructuradas.
+  * Pregunta si falta algún caso de uso crítico o validación particular.
+FORMATO JSON ESPERADO EN ESTA ETAPA (bloque \`\`\`json):
+{
+  "stage": "requirements",
+  "currentPhase": 3,
+  "phaseTitle": "Etapa 3: Historias & Criterios Gherkin",
+  "businessRules": [
+    { "id": "BR-001", "code": "BR-001", "rule": "Regla obligatoria de negocio", "category": "Business Logic" }
+  ],
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Título conciso",
+      "role": "rol del usuario",
+      "action": "acción que realiza",
+      "benefit": "valor que obtiene",
+      "priority": "P0",
+      "scopeFiles": ["src/**"],
+      "acceptanceCriteria": [
+        { "id": "c-1", "scenario": "Escenario de verificación", "given": "Dado...", "when": "Cuando...", "then": "Entonces...", "done": false }
+      ]
+    }
+  ],
+  "suggestedActions": [
+    "Aprobar historias y avanzar a Etapa 4: Pantallas & UI",
+    "Agregar caso de error a una historia",
+    "Definir otra regla de negocio"
+  ]
+}`
+
+    case 'ux':
+      return `
+ETAPA ACTIVA: 4/6 — "UI/UX: CATÁLOGO DE PANTALLAS, RUTAS Y WIREFRAMES DECLARATIVOS"
+Tu objetivo de ingeniería en esta etapa:
+- Diseñar la experiencia visual del usuario mapeando el catálogo de pantallas ("screens") con rutas ("/ruta") y propósitos claros.
+- Incluir para cada pantalla un checklist de componentes visuales clave.
+- Crear wireframes declarativos ("wireframes") con bloques estructurados (navbar, sidebar, stats-grid, table, form, modal).
+- Definir tokens del sistema de diseño ("designSystem": paleta de colores, tipografía, radios).
+- En tu texto conversacional en Markdown:
+  * Describe el recorrido visual y la jerarquía de navegación que experimentará el usuario.
+  * Presenta las pantallas y wireframes propuestos.
+  * Pregunta si el layout responde a la expectativa visual o si se requiere ajustar alguna pantalla.
+FORMATO JSON ESPERADO EN ESTA ETAPA (bloque \`\`\`json):
+{
+  "stage": "ux",
+  "currentPhase": 4,
+  "phaseTitle": "Etapa 4: Pantallas & Experiencia UI/UX",
+  "screens": [
+    {
+      "id": "SCR-01",
+      "name": "Nombre de Pantalla",
+      "route": "/ruta",
+      "description": "Descripción visual y componentes clave",
+      "layout": "standard-app",
+      "checklist": [
+        { "id": "chk-1", "text": "Elemento verificable en la UI", "done": false }
+      ]
+    }
+  ],
+  "wireframes": [
+    {
+      "id": "WF-01",
+      "screenId": "SCR-01",
+      "title": "Wireframe de Pantalla",
+      "layout": "dashboard",
+      "blocks": [
+        { "id": "blk-nav", "type": "navbar", "title": "Barra Superior", "properties": {} }
+      ]
+    }
+  ],
+  "designSystem": {
+    "palette": { "primary": "#7C3AED", "background": "#F8FAFC" }
+  },
+  "suggestedActions": [
+    "Aprobar pantallas y avanzar a Etapa 5: Arquitectura & Base de Datos",
+    "Modificar flujo de pantallas",
+    "Añadir pantalla administrativa"
+  ]
+}`
+
+    case 'architecture':
+      return `
+ETAPA ACTIVA: 5/6 — "ARCHITECTURE: TOPOLOGÍA C4, STACK, BASE DE DATOS ERD Y SECUENCIAS UML"
+Tu objetivo de ingeniería en esta etapa:
+- Definir el stack tecnológico recomendado ("stack": Frontend, Backend, Base de Datos, Auth).
+- Diseñar la topología técnica de servicios C4 ("services").
+- Modelar las tablas de base de datos relacional ERD ("database": tablas con columnas tipadas, PKs, FKs y relaciones).
+- Especificar endpoints de API REST ("endpoints") y modelos DTO ("contracts").
+- Generar el diagrama de secuencia UML en Mermaid.js ("sequenceUml") con actores, frontend, backend y base de datos.
+- En tu texto conversacional en Markdown:
+  * Explica las decisiones técnicas tomadas, justificando la elección de base de datos y arquitectura desacoplada.
+  * Presenta el diagrama de secuencia y las entidades principales.
+  * Invita al usuario a validar la propuesta técnica para proceder al plan final de ejecución.
+FORMATO JSON ESPERADO EN ESTA ETAPA (bloque \`\`\`json):
+{
+  "stage": "architecture",
+  "currentPhase": 5,
+  "phaseTitle": "Etapa 5: Arquitectura C4 & Base de Datos",
+  "stack": {
+    "frontend": { "framework": "Modern Web / Vite", "styling": "Vanilla CSS / Tailwind" },
+    "backend": { "framework": "Node.js REST API", "runtime": "Node >= 18" },
+    "database": { "engine": "PostgreSQL 16 / SQLite" }
+  },
+  "services": [
+    { "id": "svc-1", "label": "Nombre del Servicio", "tech": "Stack", "type": "Frontend|Backend|Database" }
+  ],
+  "database": [
+    { "table": "nombre_tabla", "description": "Qué persiste", "columns": ["id (UUID)", "name (VARCHAR)", "..."] }
+  ],
+  "endpoints": [
+    { "id": "api-01", "method": "GET", "path": "/api/...", "summary": "Descripción" }
+  ],
+  "sequenceUml": "sequenceDiagram\\n    autonumber\\n    ...",
+  "suggestedActions": [
+    "Aprobar arquitectura y avanzar a Etapa 6: Plan de Ejecución",
+    "Ajustar tablas de base de datos",
+    "Cambiar tecnologías del stack"
+  ]
+}`
+
+    case 'execution':
+    case 'ready':
+    default:
+      return `
+ETAPA ACTIVA: 6/6 — "EXECUTION: PLAN DE TAREAS CON SCOPE SHIELD, QUALITY GATES Y CIERRE"
+Tu objetivo de ingeniería en esta etapa:
+- Consolidar las fases de desarrollo ordenadas por precedencia ("phases").
+- Desglosar las tareas atómicas ("tasks") blindadas con "scopeFiles" (Scope Shield) para que los agentes de IA no desborden su alcance.
+- Establecer las compuertas de calidad ("qualityGates") que garantizarán la convergencia del 100%.
+- En tu texto conversacional en Markdown:
+  * Presenta el RESUMEN EJECUTIVO de toda la planificación con las 12 perspectivas de SDD listas.
+  * Felicita al usuario por haber completado una especificación rigurosa antes de codificar.
+  * Declara que la especificación está 100% LISTA PARA COMPILAR Y ABRIR LA CABINA DE CONTROL.
+FORMATO JSON ESPERADO EN ESTA ETAPA (bloque \`\`\`json):
+{
+  "stage": "ready",
+  "currentPhase": 6,
+  "phaseTitle": "Etapa 6: Plan de Ejecución & Traspaso Agéntico",
+  "phases": [
+    { "id": "phase-1", "name": "Fase 1: Configuración & Base", "order": 1, "status": "planned" },
+    { "id": "phase-2", "name": "Fase 2: Lógica Central & API", "order": 2, "status": "planned" },
+    { "id": "phase-3", "name": "Fase 3: Interfaz & UX", "order": 3, "status": "planned" },
+    { "id": "phase-4", "name": "Fase 4: Verificación & Cierre SDD", "order": 4, "status": "planned" }
+  ],
+  "tasks": [
+    { "id": "task-1", "title": "Configurar estructura y modelo base", "scopeFiles": ["src/**"], "status": "planned" }
+  ],
+  "qualityGates": [
+    { "id": "gate-1", "name": "Verificación Criterios Gherkin", "status": "approved" }
+  ],
+  "readyToScaffold": true,
+  "suggestedActions": [
+    "🚀 Aprobar y Abrir Cabina de Control"
+  ]
+}`
+  }
+}
+
+/**
  * Procesa un turno de chat conversacional en Modo Génesis 100% basado en IA real (OpenRouter) sobre contexto real.
  */
 export async function processGenesisChat(messages = [], currentPreview = null, options = {}) {
@@ -1082,26 +1409,70 @@ export async function processGenesisChat(messages = [], currentPreview = null, o
   }
 
   const targetModel = options.model || 'inclusionai/ling-3.0-flash-sante:free'
-  const activeStage = options.stage || currentPreview?.stage || 'discovery'
+
+  const stageMap = {
+    'discovery': 1,
+    'product': 2,
+    'requirements': 3,
+    'ux': 4,
+    'architecture': 5,
+    'execution': 6,
+    'ready': 6
+  }
+
+  let activeStage = options.stage || currentPreview?.stage || 'discovery'
+  let currentPhase = Number(options.phase || currentPreview?.currentPhase || stageMap[activeStage] || 1)
+
+  // Detección contextual si el usuario solicita explícitamente avanzar de etapa en el texto
+  const lowerMsg = lastUserMsg.toLowerCase()
+  if (lowerMsg.includes('etapa 2') || lowerMsg.includes('alcance') || lowerMsg.includes('non-goals') || lowerMsg.includes('fase 2')) {
+    activeStage = 'product'
+    currentPhase = 2
+  } else if (lowerMsg.includes('etapa 3') || lowerMsg.includes('historias') || lowerMsg.includes('gherkin') || lowerMsg.includes('fase 3')) {
+    activeStage = 'requirements'
+    currentPhase = 3
+  } else if (lowerMsg.includes('etapa 4') || lowerMsg.includes('pantallas') || lowerMsg.includes('wireframe') || lowerMsg.includes('ui/ux') || lowerMsg.includes('fase 4')) {
+    activeStage = 'ux'
+    currentPhase = 4
+  } else if (lowerMsg.includes('etapa 5') || lowerMsg.includes('arquitectura') || lowerMsg.includes('base de datos') || lowerMsg.includes('c4') || lowerMsg.includes('fase 5')) {
+    activeStage = 'architecture'
+    currentPhase = 5
+  } else if (lowerMsg.includes('etapa 6') || lowerMsg.includes('plan de ejec') || lowerMsg.includes('scope shield') || lowerMsg.includes('fase 6')) {
+    activeStage = 'execution'
+    currentPhase = 6
+  }
+
   const impact = analyzeImpact(lastUserMsg, currentPreview)
 
   // Contexto previo acumulado
   let previousContextStr = ''
   if (currentPreview && typeof currentPreview === 'object') {
-    const pName = currentPreview.project?.name || ''
-    const pNonGoals = currentPreview.core?.scopeBoundaries?.explicitNonGoals?.map(ng => ng.feature || ng).join(', ') || ''
-    const pStories = currentPreview.requirements?.userStories?.map(st => `${st.id}: ${st.title}`).join(' | ') || ''
-    const pScreens = currentPreview.uiUx?.screens?.map(sc => `${sc.name} (${sc.route})`).join(', ') || ''
+    const pName = currentPreview.project?.name || currentPreview.meta?.name || ''
+    const pTagline = currentPreview.project?.tagline || ''
+    const pProblem = currentPreview.core?.problem?.statement || ''
+    const pPainPoints = currentPreview.core?.problem?.painPoints?.map(p => p.pain || p).join('; ') || ''
+    const pUsers = currentPreview.product?.actors?.map(u => `${u.role}: ${u.need}`).join(' | ') || ''
     const pModules = currentPreview.product?.modules?.map(m => m.name).join(', ') || ''
-    if (pName || pNonGoals || pStories || pScreens || pModules) {
-      previousContextStr = `\nCONTEXTO ACUMULADO DEL PROJECT MODEL HASTA AHORA:
-- Proyecto: ${pName}
-- Etapa Activa: ${activeStage}
-- Módulos: ${pModules || 'Pendiente de formalizar'}
-- Non-Goals definidos: ${pNonGoals || 'Ninguno aún'}
-- Historias existentes: ${pStories || 'Ninguna aún'}
-- Pantallas mapeadas: ${pScreens || 'Ninguna aún'}
-Continúa refinando y expandiendo esta especificación acumulativa.`
+    const pNonGoals = currentPreview.core?.scopeBoundaries?.explicitNonGoals?.map(ng => ng.feature || ng).join(', ') || ''
+    const pInScope = currentPreview.product?.scope?.inScopeV1?.join(', ') || ''
+    const pStories = currentPreview.requirements?.userStories?.map(st => `${st.id}: ${st.title}`).join(' | ') || ''
+    const pRules = currentPreview.businessRules?.map(r => `${r.code}: ${r.rule}`).join(' | ') || ''
+    const pScreens = currentPreview.uiUx?.screens?.map(sc => `${sc.name} (${sc.route})`).join(', ') || ''
+
+    const lines = []
+    if (pName) lines.push(`- Proyecto: ${pName} (${pTagline})`)
+    if (pProblem) lines.push(`- Problema Raíz: ${pProblem}`)
+    if (pPainPoints) lines.push(`- Dolores Identificados: ${pPainPoints}`)
+    if (pUsers) lines.push(`- Actores/Usuarios: ${pUsers}`)
+    if (pModules) lines.push(`- Módulos Macro: ${pModules}`)
+    if (pInScope) lines.push(`- In-Scope V1: ${pInScope}`)
+    if (pNonGoals) lines.push(`- Non-Goals (Congelados para V2): ${pNonGoals}`)
+    if (pStories) lines.push(`- Historias de Usuario: ${pStories}`)
+    if (pRules) lines.push(`- Reglas de Negocio: ${pRules}`)
+    if (pScreens) lines.push(`- Pantallas Mapeadas: ${pScreens}`)
+
+    if (lines.length > 0) {
+      previousContextStr = `\nESPECIFICACIÓN ACUMULADA HASTA EL MOMENTO:\n${lines.join('\n')}\nUtiliza este contexto para profundizar y enriquecer la especificación sin repetir ni contradecir lo ya acordado.`
     }
   }
 
@@ -1114,92 +1485,35 @@ Continúa refinando y expandiendo esta especificación acumulativa.`
 Explica brevemente este impacto con claridad y aplica los cambios en el JSON generado.`
   }
 
+  const stageInstructions = getStagePromptInstructions(activeStage, currentPhase)
+
   const systemPrompt = `Eres el Mentor Principal de Ingeniería de Software y Arquitecto SDD (Spec-Driven Development).
 Tu misión es educar, acompañar y transformar las ideas del usuario en una especificación de software rigurosa, completa y profesional antes de escribir una sola línea de código.
 
 Este entorno está pensado tanto para expertos como para PERSONAS NO TÉCNICAS. Tu lenguaje conversacional debe ser claro, inspirador, didáctico y libre de jerga inútil, explicando el "por qué" de cada práctica de ingeniería.
 
-ETAPA ACTUAL EN EL PIPELINE: "${activeStage.toUpperCase()}"
-- Si la etapa es DISCOVERY: Enfócate en clarificar el problema raíz, audiencia/actores, propuesta de valor y objetivos de éxito.
-- Si la etapa es PRODUCT: Desglosa el producto en 3 a 5 módulos macro y define rigurosamente los límites de alcance (In-Scope V1 vs Non-Goals explícitos).
-- Si la etapa es REQUIREMENTS: Define épicas, historias de usuario con criterios formales Dado-Cuando-Entonces (Gherkin) y Reglas de Negocio del sistema (BR-001, etc.).
-- Si la etapa es ARCHITECTURE / UX: Diseña servicios, stack tecnológico, tablas ERD, contratos API y pantallas.
+IMPORTANTE SOBRE LA METODOLOGÍA PROGRESIVA DE PLANIFICACIÓN:
+- La planificación se realiza en 6 ETAPAS CONSECUTIVAS:
+  1. Discovery: Problema Raíz y Audiencia
+  2. Product: Límites de Alcance V1 y Non-Goals (Scope Shield)
+  3. Requirements: Historias Jira con Criterios Gherkin y Reglas de Negocio
+  4. UI/UX: Catálogo de Pantallas, Rutas y Wireframes Declarativos
+  5. Architecture: Topología C4, Stack Tecnológico, Base de Datos ERD y Secuencias UML
+  6. Execution: Plan de Ejecución con Scope Shield, Compuertas de Calidad y Cierre
+- NUNCA intentes resolver todas las etapas de una sola vez. Concéntrate EXCLUSIVAMENTE en la etapa activa indicada a continuación.
+- Explica didácticamente las propuestas para la etapa activa y haz preguntas orientadoras de ingeniería para afinar detalles antes de pasar a la siguiente etapa.
+
+${stageInstructions}
 ${previousContextStr}${impactContextStr}
 
 FORMATO ESTRICTO DE RESPUESTA:
 Tu respuesta DEBE constar de dos partes:
 1. Explicación didáctica y empática en Markdown en español:
    - Explica el concepto de ingeniería de la etapa actual con un tono cercano de mentor.
-   - Presenta las propuestas concretas para el proyecto del usuario.
+   - Presenta las propuestas concretas para el proyecto del usuario en esta etapa.
    - Si hubo un cambio o impacto, aclara qué se ajustó.
-   - Cierra con una pregunta orientadora o invitación clara al siguiente paso.
-2. Al final, un bloque JSON delimitado estrictamente por \`\`\`json y \`\`\` con la especificación acumulativa completa:
-{
-  "stage": "${activeStage}",
-  "currentPhase": 1 | 2 | 3 | 4 | 5,
-  "phaseTitle": "Nombre descriptivo de la etapa actual",
-  "projectName": "NombreDelSoftware",
-  "tagline": "Eslogan conciso y profesional",
-  "purpose": "comercial",
-  "depth": "serio",
-  "problem": {
-    "statement": "Definición clara del problema raíz",
-    "painPoints": [
-      { "id": "p-1", "pain": "Dolor específico", "severity": "alta", "evidence": "Impacto", "solution": "Cómo lo resuelve el software" }
-    ]
-  },
-  "targetUsers": [
-    { "id": "usr-1", "role": "Rol de usuario", "need": "Necesidad concreta", "frequency": "Diaria|Recurrente" }
-  ],
-  "modules": [
-    { "id": "mod-1", "name": "Nombre del Módulo", "description": "Qué resuelve este módulo" }
-  ],
-  "inScopeV1": ["Funcionalidad confirmada para V1"],
-  "nonGoals": [
-    { "feature": "Funcionalidad que NO irá en V1", "rationale": "Justificación estratégica de ingeniería" }
-  ],
-  "businessRules": [
-    { "id": "BR-001", "code": "BR-001", "rule": "Regla de negocio obligatoria", "category": "Business Logic" }
-  ],
-  "stories": [
-    {
-      "id": "US-001",
-      "title": "Título conciso de la tarea o historia",
-      "role": "tipo de usuario",
-      "action": "acción que realiza",
-      "benefit": "valor que obtiene",
-      "priority": "P0",
-      "scopeFiles": ["src/**", "app/**"],
-      "acceptanceCriteria": [
-        { "id": "c-1", "scenario": "Escenario de prueba", "given": "Dado...", "when": "Cuando...", "then": "Entonces...", "done": false }
-      ]
-    }
-  ],
-  "screens": [
-    {
-      "id": "SCR-01",
-      "name": "Nombre de la Pantalla",
-      "route": "/ruta",
-      "description": "Descripción visual de la pantalla y componentes clave",
-      "layout": "standard-app",
-      "checklist": [
-        { "id": "chk-1", "text": "Elemento verificable en la UI", "done": false }
-      ]
-    }
-  ],
-  "services": [
-    { "id": "svc-1", "label": "Nombre del Servicio", "tech": "Stack tecnológico", "type": "Frontend|Backend|Database" }
-  ],
-  "sequenceUml": "sequenceDiagram\\n    autonumber\\n    actor U as 👤 Usuario\\n    participant FE as 🖥️ Frontend Web\\n    participant BE as ⚡ Core API\\n    participant DB as 🐘 Base de Datos\\n    U->>FE: 1. Acción...\\n    FE->>BE: 2. Petición...\\n    BE->>DB: 3. Consulta...\\n    DB-->>BE: 4. Respuesta...\\n    BE-->>FE: 5. Confirmación...\\n    FE-->>U: 6. Vista actualizada",
-  "stateMachine": "stateDiagram-v2\\n    [*] --> Borrador\\n    Borrador --> EnProceso\\n    EnProceso --> Completado\\n    Completado --> [*]",
-  "database": [
-    { "table": "nombre_tabla", "description": "Qué persiste", "columns": ["id (UUID)", "created_at (Timestamp)", "..."] }
-  ],
-  "suggestedActions": [
-    "Aprobar y avanzar a la siguiente etapa",
-    "Ajustar propuesta actual"
-  ]
-}`
+   - Cierra con una pregunta orientadora o invitación clara a confirmar para avanzar a la siguiente etapa.
+2. Al final, un bloque JSON delimitado estrictamente por \`\`\`json y \`\`\` que contenga los campos de la etapa activa especificados arriba.`
 
   const openRouterResult = await callOpenRouter({
     apiKey,
@@ -1211,9 +1525,14 @@ Tu respuesta DEBE constar de dos partes:
 
   // Parsear el JSON emitido por el modelo de IA con fallback inteligente
   let aiParsed = extractJsonFromAi(openRouterResult.content) || {}
+  aiParsed.stage = aiParsed.stage || activeStage
+  aiParsed.currentPhase = aiParsed.currentPhase || currentPhase
 
-  // Construir especificación 100% basada en la IA
-  const preview = buildSpecFromAi(aiParsed, lastUserMsg)
+  // Construir especificación acumulativa basada en la IA + contexto previo
+  const preview = buildSpecFromAi(aiParsed, lastUserMsg, currentPreview)
+
+  // Determinar si realmente se alcanzó el cierre final (Etapa 6 o ready)
+  const isFinalStage = Boolean(aiParsed.readyToScaffold || preview.currentPhase >= 6 || preview.stage === 'ready' || activeStage === 'execution')
 
   // Limpiar el bloque JSON de la respuesta conversacional en Markdown
   const cleanReply = openRouterResult.content.replace(/```(?:json)?\s*\{[\s\S]*?\}\s*```/g, '').trim()
@@ -1222,6 +1541,7 @@ Tu respuesta DEBE constar de dos partes:
     reply: cleanReply || openRouterResult.content,
     preview,
     stage: preview.stage || activeStage,
+    currentPhase: preview.currentPhase || currentPhase,
     impact: impact.hasImpact ? impact : null,
     tokens: {
       promptTokens: openRouterResult.usage.promptTokens,
@@ -1229,7 +1549,7 @@ Tu respuesta DEBE constar de dos partes:
       totalTokens: openRouterResult.usage.totalTokens,
       engine: `OpenRouter AI (${openRouterResult.model})`
     },
-    readyToAdvance: true,
-    readyToScaffold: true
+    readyToAdvance: !isFinalStage,
+    readyToScaffold: isFinalStage
   }
 }

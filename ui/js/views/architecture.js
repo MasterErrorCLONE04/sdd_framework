@@ -483,6 +483,10 @@ export function renderArchitecture() {
   if (wiresSvg) wiresSvg.innerHTML = '';
 
   const services = state.appState?.architecture?.services || state.appState?.architecture?.nodes || [];
+  const tabBadgeArqui = document.getElementById('tab-badge-arqui');
+  if (tabBadgeArqui) {
+    tabBadgeArqui.innerText = `${services.length} C4`;
+  }
 
   if (services.length === 0) {
     if (servicesCountBadge) servicesCountBadge.innerText = '0 Servicios';

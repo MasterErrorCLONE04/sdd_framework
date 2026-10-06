@@ -4,16 +4,31 @@ import { state } from '../state.js';
 
 export function renderRolesAndRisks() {
   const matrix = state.appState?.requirements?.rolesMatrix;
+  const actors = state.appState?.product?.actors || state.appState?.core?.targetUsers?.personas || [];
   const rolesContainer = document.getElementById('roles-table-container');
+
+  const rolesList = (matrix && matrix.roles && matrix.roles.length > 0)
+    ? matrix.roles
+    : actors.map(a => ({
+        name: a.name || a.role || 'Usuario',
+        level: a.role || 'user',
+        permissions: Array.isArray(a.responsibilities) ? a.responsibilities : [a.description || 'Interacción base con la plataforma']
+      }));
+
+  const tabBadgeRoles = document.getElementById('tab-badge-roles');
+  if (tabBadgeRoles) {
+    tabBadgeRoles.innerText = String(rolesList.length);
+  }
+
   if (rolesContainer) {
-    if (matrix && matrix.roles && matrix.roles.length > 0) {
+    if (rolesList.length > 0) {
       rolesContainer.innerHTML = `
         <table class="w-full text-xs text-left">
           <thead class="text-[10px] uppercase text-zinc-400 border-b border-zinc-200">
-            <tr><th class="py-2">Rol</th><th>Nivel</th><th>Permisos</th></tr>
+            <tr><th class="py-2">Rol / Actor</th><th>Nivel</th><th>Responsabilidades / Permisos</th></tr>
           </thead>
           <tbody class="divide-y divide-zinc-100">
-            ${matrix.roles.map(r => `
+            ${rolesList.map(r => `
               <tr>
                 <td class="py-2 font-bold text-zinc-900">${r.name}</td>
                 <td><span class="text-[10px] font-mono bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded font-bold">${r.level}</span></td>
@@ -24,7 +39,7 @@ export function renderRolesAndRisks() {
         </table>
       `;
     } else {
-      rolesContainer.innerHTML = '<div class="p-8 text-center text-xs text-zinc-400 font-medium">No hay roles ni permisos definidos aún en este proyecto.</div>';
+      rolesContainer.innerHTML = '<div class="p-8 text-center text-xs text-zinc-400 font-medium">No hay roles ni actores definidos aún en este proyecto.</div>';
     }
   }
 

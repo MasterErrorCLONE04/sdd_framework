@@ -15,6 +15,29 @@ export function renderHeader() {
   if (depthEl) depthEl.innerText = `SDD ${(p.depth || 'serio').toUpperCase()}`;
   if (purposeEl) purposeEl.innerText = (p.purpose || 'comercial').toUpperCase();
 
+  const stageContainer = document.getElementById('header-stage-container');
+  const stageText = document.getElementById('header-stage-text');
+  const stageDot = document.getElementById('header-stage-dot');
+  if (stageContainer && stageText) {
+    const stage = p.stage || state.appState?.meta?.stage || 'discovery';
+    const progress = typeof p.progress === 'number' ? p.progress : (state.appState?.meta?.progress || 10);
+    const stageUpper = String(stage).toUpperCase();
+
+    if (stage === 'ready') {
+      stageText.innerText = `✓ GÉNESIS LISTO (${progress}%)`;
+      stageContainer.className = 'hidden sm:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-200';
+      if (stageDot) stageDot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-500';
+    } else if (stage === 'execution') {
+      stageText.innerText = `⚡ EJECUCIÓN (${progress}%)`;
+      stageContainer.className = 'hidden sm:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-50 text-amber-800 border border-amber-200';
+      if (stageDot) stageDot.className = 'w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse';
+    } else {
+      stageText.innerText = `ETAPA: ${stageUpper} (${progress}%)`;
+      stageContainer.className = 'hidden sm:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-indigo-50 text-indigo-800 border border-indigo-200';
+      if (stageDot) stageDot.className = 'w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse';
+    }
+  }
+
   const m = state.appState.manifest?.metrics;
   if (m) {
     const healthPctEl = document.getElementById('header-health-pct');

@@ -1,127 +1,147 @@
-<!-- LEFT COCKPIT PERSPECTIVES SIDEBAR -->
+<!-- LEFT COCKPIT PERSPECTIVES SIDEBAR — 6 DOMINIOS COHESIVOS DE SDD GENESIS -->
 <aside class="w-64 bg-white border-r border-zinc-200 flex flex-col justify-between p-3.5 shrink-0 overflow-y-auto select-none shadow-2xs z-20">
   <div class="space-y-4">
-    <!-- 1. Gobernanza & Estrategia -->
+
+    <!-- 1. PRODUCTO (Strategy & Scope) -->
     <div class="space-y-1">
       <div class="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 px-2.5 py-0.5">
-        Gobernanza & Estrategia
+        1. Producto & Estrategia
       </div>
-      <button onclick="switchTab('core')" id="tab-core" class="tab-button w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition-all text-zinc-700 hover:bg-zinc-100 cursor-pointer">
-        <span class="flex items-center gap-2">
-          <i data-lucide="compass" class="w-4 h-4 text-emerald-600"></i>
-          <span>Núcleo & Compuertas</span>
-        </span>
-        <span id="tab-badge-core" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full font-black bg-emerald-100 text-emerald-800">5/5</span>
-      </button>
       <button onclick="switchTab('discovery')" id="tab-discovery" class="tab-button w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition-all text-zinc-700 hover:bg-zinc-100 cursor-pointer">
         <span class="flex items-center gap-2">
           <i data-lucide="sparkles" class="w-4 h-4 text-amber-500"></i>
           <span>Discovery & Hipótesis</span>
         </span>
-        <span id="tab-badge-discovery" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-amber-50 text-amber-700 border border-amber-200">12 Qs</span>
+        <span id="tab-badge-discovery" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-amber-50 text-amber-700 border border-amber-200">0</span>
       </button>
-    </div>
-
-    <!-- 2. Requerimientos & Casos (Jira) -->
-    <div class="space-y-1">
-      <div class="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 px-2.5 py-0.5">
-        Requerimientos (Jira)
-      </div>
-      <button onclick="switchTab('stories')" id="tab-stories" class="tab-button w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition-all bg-purple-50 text-purple-950 border border-purple-200/80 shadow-xs cursor-pointer">
+      <button onclick="switchTab('core')" id="tab-core" class="tab-button w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition-all text-zinc-700 hover:bg-zinc-100 cursor-pointer">
         <span class="flex items-center gap-2">
-          <i data-lucide="file-text" class="w-4 h-4 text-blue-600"></i>
-          <span>Historias & Gherkin</span>
+          <i data-lucide="compass" class="w-4 h-4 text-emerald-600"></i>
+          <span>Visión & Non-Goals</span>
         </span>
-        <span id="tab-badge-stories" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-blue-100 text-blue-800 font-bold">3</span>
-      </button>
-      <button onclick="switchTab('kanban')" id="tab-kanban" class="tab-button w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition-all text-zinc-700 hover:bg-zinc-100 cursor-pointer">
-        <span class="flex items-center gap-2">
-          <i data-lucide="kanban" class="w-4 h-4 text-amber-600"></i>
-          <span>Tablero Kanban</span>
-        </span>
-        <span id="tab-badge-kanban" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-100 text-zinc-600">Sprint</span>
+        <span id="tab-badge-core" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full font-black bg-emerald-100 text-emerald-800">5/5</span>
       </button>
       <button onclick="switchTab('roles')" id="tab-roles" class="tab-button w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition-all text-zinc-700 hover:bg-zinc-100 cursor-pointer">
         <span class="flex items-center gap-2">
-          <i data-lucide="shield-alert" class="w-4 h-4 text-orange-600"></i>
-          <span>Roles & Riesgos</span>
+          <i data-lucide="users" class="w-4 h-4 text-orange-600"></i>
+          <span>Roles & Arquetipos</span>
         </span>
+        <span id="tab-badge-roles" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-orange-50 text-orange-700 border border-orange-200">0</span>
       </button>
     </div>
 
-    <!-- 3. Arquitectura & Datos -->
+    <!-- 2. REQUERIMIENTOS (Functional Specs) -->
     <div class="space-y-1">
       <div class="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 px-2.5 py-0.5">
-        Arquitectura & Datos
+        2. Requerimientos Funcionales
       </div>
-      <button onclick="switchTab('architecture')" id="tab-architecture" class="tab-button w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition-all text-zinc-700 hover:bg-zinc-100 cursor-pointer">
+      <button onclick="switchTab('stories')" id="tab-stories" class="tab-button w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition-all text-zinc-700 hover:bg-zinc-100 cursor-pointer">
         <span class="flex items-center gap-2">
-          <i data-lucide="cpu" class="w-4 h-4 text-indigo-600"></i>
-          <span>Arquitectura Macro C4</span>
+          <i data-lucide="file-text" class="w-4 h-4 text-blue-600"></i>
+          <span>Épicas, Historias & Gherkin</span>
         </span>
+        <span id="tab-badge-stories" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-blue-100 text-blue-800 font-bold">0</span>
       </button>
-      <button onclick="switchTab('database')" id="tab-database" class="tab-button w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition-all text-zinc-700 hover:bg-zinc-100 cursor-pointer">
-        <span class="flex items-center gap-2">
-          <i data-lucide="database" class="w-4 h-4 text-cyan-600"></i>
-          <span>Modelo ERD (DB)</span>
-        </span>
-        <span id="tab-badge-db" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-cyan-50 text-cyan-700 border border-cyan-200">5</span>
-      </button>
+    </div>
+
+    <!-- 3. PROCESOS & FLUJOS (Cognitive & Pipelines) -->
+    <div class="space-y-1">
+      <div class="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 px-2.5 py-0.5">
+        3. Procesos & Flujos
+      </div>
       <button onclick="switchTab('flows')" id="tab-flows" class="tab-button w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition-all text-zinc-700 hover:bg-zinc-100 cursor-pointer">
         <span class="flex items-center gap-2">
           <i data-lucide="layers" class="w-4 h-4 text-teal-600"></i>
-          <span>Flujos & Nodos</span>
+          <span>Flujos de Usuario & Backend</span>
         </span>
+        <span id="tab-badge-flows" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-teal-50 text-teal-700 border border-teal-200">0</span>
       </button>
       <button onclick="switchTab('sequences')" id="tab-sequences" class="tab-button w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition-all text-zinc-700 hover:bg-zinc-100 cursor-pointer">
         <span class="flex items-center gap-2">
           <i data-lucide="workflow" class="w-4 h-4 text-purple-600"></i>
-          <span>Secuencias (UML)</span>
+          <span>Diagramas UML (14)</span>
         </span>
-        <span id="tab-badge-sequences" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-100 text-zinc-600">1</span>
+        <span id="tab-badge-sequences" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-purple-50 text-purple-700 border border-purple-200">14 UML</span>
       </button>
     </div>
 
-    <!-- 4. Calidad, QA & Scope -->
+    <!-- 4. DISEÑO TÉCNICO (Architecture & DB) -->
     <div class="space-y-1">
       <div class="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 px-2.5 py-0.5">
-        Calidad & Control
+        4. Diseño Técnico
       </div>
-      <button onclick="switchTab('qa')" id="tab-qa" class="tab-button w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition-all text-zinc-700 hover:bg-zinc-100 cursor-pointer">
+      <button onclick="switchTab('architecture')" id="tab-architecture" class="tab-button w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition-all text-zinc-700 hover:bg-zinc-100 cursor-pointer">
         <span class="flex items-center gap-2">
-          <i data-lucide="test-tube-2" class="w-4 h-4 text-emerald-600"></i>
-          <span>Plan QA (Pruebas)</span>
+          <i data-lucide="cpu" class="w-4 h-4 text-indigo-600"></i>
+          <span>Arquitectura C4 & Stack</span>
         </span>
-        <span id="tab-badge-qa" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">6 TCs</span>
+        <span id="tab-badge-arqui" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">C4</span>
       </button>
-      <button onclick="switchTab('drift')" id="tab-drift" class="tab-button w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition-all text-zinc-700 hover:bg-zinc-100 cursor-pointer">
+      <button onclick="switchTab('database')" id="tab-database" class="tab-button w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition-all text-zinc-700 hover:bg-zinc-100 cursor-pointer">
         <span class="flex items-center gap-2">
-          <i data-lucide="git-compare" class="w-4 h-4 text-red-600"></i>
-          <span>Deriva (Drift)</span>
+          <i data-lucide="database" class="w-4 h-4 text-cyan-600"></i>
+          <span>Modelo Relacional (ERD)</span>
         </span>
-        <span id="tab-badge-drift" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full font-black bg-emerald-100 text-emerald-800">100%</span>
+        <span id="tab-badge-db" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-cyan-50 text-cyan-700 border border-cyan-200">0</span>
       </button>
+    </div>
+
+    <!-- 5. UI/UX & PROTOTIPOS (Declarative Design) -->
+    <div class="space-y-1">
+      <div class="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 px-2.5 py-0.5">
+        5. UI/UX & Prototipos
+      </div>
       <button onclick="switchTab('uiux')" id="tab-uiux" class="tab-button w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition-all text-zinc-700 hover:bg-zinc-100 cursor-pointer">
         <span class="flex items-center gap-2">
           <i data-lucide="layout" class="w-4 h-4 text-pink-600"></i>
-          <span>UI/UX Mockups</span>
+          <span>Wireframes & Pantallas</span>
         </span>
-        <span id="tab-badge-ui" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-100 text-zinc-600">4</span>
+        <span id="tab-badge-ui" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-pink-50 text-pink-700 border border-pink-200">0</span>
       </button>
     </div>
+
+    <!-- 6. EJECUCIÓN & GOBERNANZA (Agile & AI Convergence) -->
+    <div class="space-y-1">
+      <div class="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 px-2.5 py-0.5">
+        6. Ejecución & Handoff
+      </div>
+      <button onclick="switchTab('kanban')" id="tab-kanban" class="tab-button w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition-all text-zinc-700 hover:bg-zinc-100 cursor-pointer">
+        <span class="flex items-center gap-2">
+          <i data-lucide="kanban" class="w-4 h-4 text-amber-600"></i>
+          <span>Plan de Ejecución Kanban</span>
+        </span>
+        <span id="tab-badge-kanban" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-amber-50 text-amber-800 font-bold border border-amber-200">0</span>
+      </button>
+      <button onclick="switchTab('drift')" id="tab-drift" class="tab-button w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition-all text-zinc-700 hover:bg-zinc-100 cursor-pointer">
+        <span class="flex items-center gap-2">
+          <i data-lucide="shield-alert" class="w-4 h-4 text-rose-600"></i>
+          <span>Scope Shield & Deriva</span>
+        </span>
+        <span id="tab-badge-drift" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full font-black bg-emerald-100 text-emerald-800">100%</span>
+      </button>
+      <button onclick="switchTab('qa')" id="tab-qa" class="tab-button w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition-all text-zinc-700 hover:bg-zinc-100 cursor-pointer">
+        <span class="flex items-center gap-2">
+          <i data-lucide="test-tube-2" class="w-4 h-4 text-emerald-600"></i>
+          <span>Plan QA & Pruebas</span>
+        </span>
+        <span id="tab-badge-qa" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">0</span>
+      </button>
+    </div>
+
   </div>
 
+  <!-- Footer con indicador de Directivas Agénticas -->
   <div class="border-t border-zinc-200/80 pt-3">
     <div class="p-2.5 rounded-xl bg-purple-50/70 border border-purple-200/80 text-[11px] space-y-1">
       <div class="flex items-center justify-between text-purple-950 font-bold">
         <span class="flex items-center gap-1.5">
           <i data-lucide="shield-check" class="w-3.5 h-3.5 text-purple-600"></i>
-          <span>Gobernanza V1</span>
+          <span>SDD Genesis Protocol</span>
         </span>
-        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
       </div>
       <div class="text-[10px] text-zinc-500">
-        Directivas blindadas en <code class="font-mono text-purple-700 font-bold">AGENTS.md</code>
+        Directivas sincronizadas en <code class="font-mono text-purple-700 font-bold">AGENTS.md</code>
       </div>
     </div>
   </div>

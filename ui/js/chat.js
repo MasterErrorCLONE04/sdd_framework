@@ -272,6 +272,8 @@ export function startNewChatProject() {
   state.activeSessionId = null;
   state.chatMessages = [];
   state.currentChatPreview = null;
+  state.currentChatStage = 'discovery';
+  state.currentChatPhase = 1;
   const stream = document.getElementById('genesis-messages-stream');
   if (stream) stream.innerHTML = '';
   document.getElementById('genesis-chat-hero')?.classList.remove('hidden');
@@ -280,6 +282,7 @@ export function startNewChatProject() {
     input.value = '';
     input.focus();
   }
+  updateGenesisStepper(1);
   renderSidebarHistory();
 }
 
@@ -474,11 +477,15 @@ export async function sendGenesisChatMessage() {
       messages: state.chatMessages,
       currentPreview: state.currentChatPreview,
       engine: state.selectedEngine,
-      model: state.selectedModel
+      model: state.selectedModel,
+      stage: state.currentChatStage || 'discovery',
+      phase: state.currentChatPhase || 1
     });
     if (!data.success) throw new Error(data.error || 'Error al procesar consulta');
 
     state.currentChatPreview = data.preview;
+    state.currentChatStage = data.stage || state.currentChatStage || 'discovery';
+    state.currentChatPhase = Number(data.currentPhase || data.preview?.currentPhase || state.currentChatPhase || 1);
     state.chatMessages.push({ role: 'assistant', content: data.reply });
 
     if (data.tokens) {
@@ -489,7 +496,7 @@ export async function sendGenesisChatMessage() {
     }
 
     // Actualizar stepper de fases
-    updateGenesisStepper(data.preview?.currentPhase || 2);
+    updateGenesisStepper(state.currentChatPhase);
 
     const contentEl = document.getElementById(`${bubbleId}-content`);
     if (contentEl) {
@@ -553,9 +560,42 @@ export async function sendGenesisChatMessage() {
             ${data.preview?.core?.problem?.statement ? `
               <div class="space-y-1">
                 <span class="text-[10px] font-mono font-black uppercase tracking-wider text-zinc-400">Problema Raíz Identificado:</span>
-                <p class="text-xs text-zinc-800 bg-white p-3 rounded-xl border border-zinc-200/80 leading-relaxed">
+                <p class="text-xs text-zinc-800 bg-white p-3 rounded-xl border border-zinc-200/80 leading-relaxed font-medium">
                   ${escapeHtml(data.preview.core.problem.statement)}
                 </p>
+              </div>
+            ` : ''}
+
+            ${(Array.isArray(data.preview?.core?.problem?.painPoints) && data.preview.core.problem.painPoints.length > 0) ? `
+              <div class="space-y-1">
+                <span class="text-[10px] font-mono font-black uppercase tracking-wider text-purple-700">Dolores Clave del Usuario:</span>
+                <div class="grid grid-cols-1 gap-1.5">
+                  ${data.preview.core.problem.painPoints.map(p => `
+                    <div class="p-2.5 rounded-xl bg-white border border-purple-100 flex items-start justify-between gap-2 text-xs shadow-2xs">
+                      <div class="space-y-0.5">
+                        <div class="font-bold text-zinc-900">${escapeHtml(p.pain || p)}</div>
+                        ${p.solution ? `<div class="text-[11px] text-zinc-500 font-normal">${escapeHtml(p.solution)}</div>` : ''}
+                      </div>
+                      <span class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 font-bold border border-purple-200 shrink-0 uppercase">
+                        ${escapeHtml(p.severity || 'media')}
+                      </span>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            ` : ''}
+
+            ${(Array.isArray(data.preview?.product?.actors) && data.preview.product.actors.length > 0) ? `
+              <div class="space-y-1">
+                <span class="text-[10px] font-mono font-black uppercase tracking-wider text-indigo-700">Audiencia & Actores:</span>
+                <div class="flex flex-wrap gap-2">
+                  ${data.preview.product.actors.map(u => `
+                    <span class="px-2.5 py-1 rounded-xl bg-white border border-indigo-100 text-xs font-semibold text-indigo-950 flex items-center gap-1.5 shadow-2xs">
+                      <i data-lucide="user" class="w-3 h-3 text-indigo-600"></i>
+                      <span>${escapeHtml(u.role)}: ${escapeHtml(u.need || '')}</span>
+                    </span>
+                  `).join('')}
+                </div>
               </div>
             ` : ''}
 
@@ -670,26 +710,80 @@ export async function sendGenesisChatMessage() {
             </div>
           ` : ''}
 
-          <!-- Compile / Open Cockpit Primary Action -->
-          <div class="p-3.5 bg-white border-t border-zinc-200 flex flex-wrap items-center justify-between gap-3">
-            <div class="space-y-0.5">
-              <div class="text-xs font-black text-zinc-950 flex items-center gap-1.5">
-                <i data-lucide="shield-check" class="w-4 h-4 text-emerald-600"></i>
-                <span>Especificación Lista para Compilar</span>
-              </div>
-              <p class="text-[11px] text-zinc-500 font-normal">
-                Genera las 12 perspectivas de SDD y directivas blindadas en <code class="font-mono text-purple-700">AGENTS.md</code>.
-              </p>
-            </div>
+          <!-- Stage Progression or Final Scaffolding Action Deck -->
+          ${(() => {
+            const currentPhase = Number(data.currentPhase || data.preview?.currentPhase || state.currentChatPhase || 1);
+            const stage = data.stage || data.preview?.stage || state.currentChatStage || 'discovery';
+            const isComplete = Boolean(data.readyToScaffold || currentPhase >= 6 || stage === 'ready');
 
-            <button
-              onclick="confirmAndOpenCockpit()"
-              class="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold flex items-center gap-2 shadow-md shadow-purple-600/25 active:scale-95 transition-all cursor-pointer"
-            >
-              <i data-lucide="layout-dashboard" class="w-4 h-4 text-white"></i>
-              <span>🚀 Aprobar y Abrir Cabina de Control</span>
-            </button>
-          </div>
+            const phaseCatalog = {
+              1: { name: 'Problema & Audiencia', next: 'Alcance & Non-Goals V1', nextPhase: 2 },
+              2: { name: 'Alcance V1 & Non-Goals', next: 'Historias & Gherkin', nextPhase: 3 },
+              3: { name: 'Historias & Gherkin', next: 'Pantallas & UI Declarativa', nextPhase: 4 },
+              4: { name: 'Pantallas & UI Declarativa', next: 'Arquitectura & Base de Datos', nextPhase: 5 },
+              5: { name: 'Arquitectura & Base de Datos', next: 'Plan de Ejecución & Scope Shield', nextPhase: 6 },
+              6: { name: 'Plan de Ejecución & Cierre', next: 'Aprobar y Abrir Cabina', nextPhase: 6 }
+            };
+            const currentMeta = phaseCatalog[currentPhase] || { name: `Etapa ${currentPhase}`, next: 'Siguiente Etapa', nextPhase: Math.min(currentPhase + 1, 6) };
+
+            if (isComplete) {
+              return `
+                <div class="p-4 bg-gradient-to-r from-purple-50 via-indigo-50 to-emerald-50 border-t border-purple-200 flex flex-wrap items-center justify-between gap-3">
+                  <div class="space-y-1">
+                    <div class="text-xs font-black text-zinc-950 flex items-center gap-1.5">
+                      <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i>
+                      <span>¡Planificación Completa de las 12 Perspectivas SDD!</span>
+                      <span class="text-[9px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-300">100% Listo</span>
+                    </div>
+                    <p class="text-[11px] text-zinc-600 font-normal">
+                      Todas las etapas han sido estructuradas rigurosamente. Al aprobar, se compilarán los esquemas canónicos en <code class="font-mono text-purple-700">.sdd/</code> y directivas blindadas en <code class="font-mono text-purple-700">AGENTS.md</code>.
+                    </p>
+                  </div>
+
+                  <button
+                    onclick="confirmAndOpenCockpit()"
+                    class="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-purple-600/25 active:scale-95 transition-all cursor-pointer"
+                  >
+                    <i data-lucide="layout-dashboard" class="w-4 h-4 text-white"></i>
+                    <span>🚀 Aprobar y Abrir Cabina de Control</span>
+                  </button>
+                </div>
+              `;
+            } else {
+              return `
+                <div class="p-3.5 bg-white border-t border-zinc-200 flex flex-wrap items-center justify-between gap-3">
+                  <div class="space-y-0.5">
+                    <div class="text-xs font-bold text-zinc-900 flex items-center gap-1.5">
+                      <span class="w-2 h-2 rounded-full bg-purple-600 animate-pulse"></span>
+                      <span class="font-mono text-[11px] text-purple-700 font-black">Etapa ${currentPhase}/6:</span>
+                      <span>${escapeHtml(currentMeta.name)}</span>
+                    </div>
+                    <p class="text-[11px] text-zinc-500 font-normal">
+                      Responde las preguntas del mentor para afinar esta etapa o avanza cuando estés conforme.
+                    </p>
+                  </div>
+
+                  <div class="flex items-center gap-2">
+                    <button
+                      onclick="advanceStageFromChat(${currentMeta.nextPhase})"
+                      class="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold flex items-center gap-2 shadow-sm shadow-purple-600/20 active:scale-95 transition-all cursor-pointer"
+                    >
+                      <span>Avanzar a Etapa ${currentMeta.nextPhase}: ${escapeHtml(currentMeta.next)}</span>
+                      <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+                    </button>
+
+                    <button
+                      onclick="confirmAndOpenCockpit()"
+                      class="px-2.5 py-2 rounded-xl text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 text-[11px] font-semibold transition-all cursor-pointer"
+                      title="Abrir la Cabina con la especificación en borrador"
+                    >
+                      <span>Ver borrador en Cabina</span>
+                    </button>
+                  </div>
+                </div>
+              `;
+            }
+          })()}
 
         </div>
 
@@ -704,7 +798,10 @@ export async function sendGenesisChatMessage() {
     }
 
     if (existingSession) {
-      existingSession.status = 'completed';
+      const isCompleteSession = Boolean(data.readyToScaffold || data.currentPhase >= 6 || data.stage === 'ready');
+      existingSession.status = isCompleteSession ? 'completed' : 'in_progress';
+      existingSession.phase = data.currentPhase || 1;
+      existingSession.stage = data.stage || 'discovery';
       existingSession.title = data.preview?.project?.name || existingSession.title;
       saveStoredSessions(sessions);
       renderSidebarHistory();
@@ -882,8 +979,8 @@ export function copyGenesisOrderToClipboard() {
 }
 
 export function updateGenesisStepper(currentPhase = 1) {
-  const phaseNum = typeof currentPhase === 'number' ? currentPhase : (currentPhase === 'complete' ? 5 : 1);
-  for (let i = 1; i <= 5; i++) {
+  const phaseNum = typeof currentPhase === 'number' ? currentPhase : (currentPhase === 'complete' ? 6 : 1);
+  for (let i = 1; i <= 6; i++) {
     const pill = document.getElementById(`step-pill-${i}`);
     if (!pill) continue;
     const num = pill.querySelector('.step-number');
@@ -908,6 +1005,22 @@ export function updateGenesisStepper(currentPhase = 1) {
     }
   }
   if (window.lucide) window.lucide.createIcons();
+}
+
+export function advanceStageFromChat(targetPhase = 1) {
+  const phaseMap = {
+    1: { stage: 'discovery', prompt: 'Continuemos con la Etapa 1: Definir a fondo el problema raíz y los dolores de la audiencia' },
+    2: { stage: 'product', prompt: 'Aprobado. Avancemos a la Etapa 2: Definir los módulos macro, el alcance V1 y los Non-Goals explícitos congelados para V2' },
+    3: { stage: 'requirements', prompt: 'Aprobado. Avancemos a la Etapa 3: Estructurar las Historias de Usuario Jira con criterios Gherkin Dado-Cuando-Entonces y Reglas de Negocio' },
+    4: { stage: 'ux', prompt: 'Aprobado. Avancemos a la Etapa 4: Diseñar las pantallas UI, rutas de navegación, componentes y wireframes declarativos' },
+    5: { stage: 'architecture', prompt: 'Aprobado. Avancemos a la Etapa 5: Definir la arquitectura técnica C4, stack de desarrollo, tablas ERD y diagrama UML de secuencia' },
+    6: { stage: 'execution', prompt: 'Aprobado. Avancemos a la Etapa 6: Generar el plan de ejecución por fases, tareas con Scope Shield y compuertas de calidad' }
+  };
+  const phaseInfo = phaseMap[targetPhase] || phaseMap[6];
+  state.currentChatStage = phaseInfo.stage;
+  state.currentChatPhase = targetPhase;
+  updateGenesisStepper(targetPhase);
+  setPromptIdea(phaseInfo.prompt);
 }
 
 export function switchPreviewTab(bubbleId, tabName) {
@@ -958,6 +1071,7 @@ export function sendQuickAction(actionText) {
 
 // Window global exposures
 window.updateGenesisStepper = updateGenesisStepper;
+window.advanceStageFromChat = advanceStageFromChat;
 window.switchPreviewTab = switchPreviewTab;
 window.sendQuickAction = sendQuickAction;
 

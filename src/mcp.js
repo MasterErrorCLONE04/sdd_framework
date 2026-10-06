@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { execSync } from 'child_process'
+import { compileAgentContext, dispatchTaskToAgent, completeTaskAndAdvance } from './agent-context.js'
 
 /**
  * Servidor MCP (Model Context Protocol) sobre JSON-RPC 2.0 por stdio.
@@ -11,6 +12,8 @@ export function startMcpServer(projectRoot = process.cwd()) {
   const coreDir = path.join(sddDir, 'core')
   const reqDir = path.join(sddDir, 'requirements')
   const storiesDir = path.join(reqDir, 'stories')
+  const execDir = path.join(sddDir, 'execution')
+  const govDir = path.join(sddDir, 'governance')
 
   function readJson(p, fallback = null) {
     try {
@@ -180,6 +183,72 @@ export function startMcpServer(projectRoot = process.cwd()) {
       inputSchema: {
         type: 'object',
         properties: {}
+      }
+    },
+    {
+      name: 'sdd_get_uiux_specs',
+      description: 'Devuelve las especificaciones de interfaz de usuario (UI/UX): catálogo de pantallas enriquecidas (rutas, actores, estados, componentes, datos requeridos), wireframes declarativos (layouts y bloques) y tokens del Design System.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          filter: { type: 'string', enum: ['all', 'screens', 'wireframes', 'design-system'], description: 'Sección a consultar (por defecto all)' },
+          screenId: { type: 'string', description: 'ID o ruta de pantalla específica a consultar' }
+        }
+      }
+    },
+    {
+      name: 'sdd_get_execution_plan',
+      description: 'Devuelve el plan de ejecución agéntico formal (fases, tareas con Scope Shield y dificultad, grafo de dependencias DAG y compuertas de calidad).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          phaseId: { type: 'string', description: 'Filtrar tareas por ID de fase (ej: phase-1)' },
+          status: { type: 'string', enum: ['all', 'planned', 'in_progress', 'review', 'done'], description: 'Filtrar por estado' }
+        }
+      }
+    },
+    {
+      name: 'sdd_get_active_task',
+      description: 'Devuelve la tarea activa actual compilada para el agente de IA: Scope Shield (archivos permitidos), criterios Gherkin, bloqueadores de dependencias, reglas de negocio vinculadas y compuerta de calidad.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          taskId: { type: 'string', description: 'ID de tarea opcional a consultar. Si se omite, devuelve la tarea activa actual despachada.' }
+        }
+      }
+    },
+    {
+      name: 'sdd_update_task_progress',
+      description: 'Actualiza el progreso de una tarea de ejecución: marcar criterios Gherkin como cumplidos, actualizar estado o completar la tarea para avanzar el plan automáticamente.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          taskId: { type: 'string', description: 'ID de la tarea (ej: task-1)' },
+          criterionIndex: { type: 'number', description: 'Índice (0-based) del criterio Gherkin a marcar' },
+          criterionId: { type: 'string', description: 'ID del criterio Gherkin a marcar' },
+          done: { type: 'boolean', description: 'true si el criterio fue cumplido' },
+          status: { type: 'string', enum: ['planned', 'in_progress', 'review', 'done'], description: 'Nuevo estado de la tarea' },
+          agentName: { type: 'string', description: 'Firma del agente (ej: Antigravity)' }
+        },
+        required: ['taskId']
+      }
+    },
+    {
+      name: 'sdd_get_uml_diagrams',
+      description: 'Devuelve la Suite completa de los 14 diagramas UML estándar OMG del sistema (7 estructurales y 7 de comportamiento) con su código Mermaid ejecutable y metadatos.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          category: {
+            type: 'string',
+            enum: ['all', 'structural', 'behavioral'],
+            description: 'Filtro por categoría: "all" (14 diagramas), "structural" (7 estructurales) o "behavioral" (7 de comportamiento).'
+          },
+          diagramId: {
+            type: 'string',
+            description: 'ID específico del diagrama (ej: UML-01-CLASS, UML-08-USECASE, UML-11-SEQUENCE)'
+          }
+        }
       }
     }
   ]
@@ -371,6 +440,47 @@ export function startMcpServer(projectRoot = process.cwd()) {
         }
       }
 
+      case 'sdd_get_uiux_specs': {
+        const uiDir = path.join(sddDir, 'ui-ux')
+        const filter = args?.filter || 'all'
+        let screens = readJson(path.join(uiDir, 'screens.json'), [])
+        let wireframes = readJson(path.join(uiDir, 'wireframes.json'), [])
+        let designSystem = readJson(path.join(uiDir, 'design-system.json'), {})
+        let components = readJson(path.join(uiDir, 'components.json'), [])
+
+        if (args?.screenId) {
+          screens = screens.filter(s => s.id === args.screenId || s.route === args.screenId)
+          wireframes = wireframes.filter(w => w.screenId === args.screenId || w.id === args.screenId)
+        }
+
+        let result = {}
+        if (filter === 'screens') {
+          result = { screensCount: screens.length, screens }
+        } else if (filter === 'wireframes') {
+          result = { wireframesCount: wireframes.length, wireframes }
+        } else if (filter === 'design-system') {
+          result = { designSystem, components }
+        } else {
+          result = {
+            screensCount: screens.length,
+            screens,
+            wireframesCount: wireframes.length,
+            wireframes,
+            components,
+            designSystem
+          }
+        }
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2)
+            }
+          ]
+        }
+      }
+
       case 'sdd_get_active_story': {
         let stories = []
         if (fs.existsSync(storiesDir)) {
@@ -441,10 +551,21 @@ export function startMcpServer(projectRoot = process.cwd()) {
 
       case 'sdd_verify_drift': {
         let declared = new Set()
-        if (args.storyId) {
+        if (args.taskId) {
+          const tasks = readJson(path.join(execDir, 'tasks.json'), [])
+          const t = tasks.find(item => item.id === args.taskId)
+          t?.scopeFiles?.forEach(f => declared.add(f.replace(/\\/g, '/')))
+        } else if (args.storyId) {
           const s = readJson(path.join(storiesDir, `${args.storyId}.json`))
           s?.scopeFiles?.forEach(f => declared.add(f.replace(/\\/g, '/')))
         } else {
+          const activeTask = readJson(path.join(sddDir, 'active_task.json'))
+          if (activeTask?.scopeFiles && activeTask.scopeFiles.length > 0) {
+            activeTask.scopeFiles.forEach(f => declared.add(f.replace(/\\/g, '/')))
+          }
+          const tasks = readJson(path.join(execDir, 'tasks.json'), [])
+          tasks.forEach(t => t?.scopeFiles?.forEach(file => declared.add(file.replace(/\\/g, '/'))))
+
           if (fs.existsSync(storiesDir)) {
             const files = fs.readdirSync(storiesDir).filter(f => f.endsWith('.json'))
             files.forEach(f => {
@@ -593,6 +714,180 @@ export function startMcpServer(projectRoot = process.cwd()) {
                 message: isConverged
                   ? '✓ Proyecto 100% convergido contra la especificación SDD.'
                   : `⚠️ Divergencia: faltan ${pending.length} criterios Gherkin por verificar.`
+              }, null, 2)
+            }
+          ]
+        }
+      }
+
+      case 'sdd_get_execution_plan': {
+        const phases = readJson(path.join(execDir, 'phases.json'), [])
+        let tasks = readJson(path.join(execDir, 'tasks.json'), [])
+        const deps = readJson(path.join(execDir, 'dependencies.json'), { nodes: [], edges: [] })
+        const gates = readJson(path.join(govDir, 'quality-gates.json'), [])
+
+        if (args?.phaseId) {
+          tasks = tasks.filter(t => t.phaseId === args.phaseId)
+        }
+        if (args?.status && args.status !== 'all') {
+          tasks = tasks.filter(t => t.status === args.status)
+        }
+
+        const summary = {
+          totalPhases: phases.length,
+          totalTasks: tasks.length,
+          plannedTasks: tasks.filter(t => t.status === 'planned').length,
+          inProgressTasks: tasks.filter(t => t.status === 'in_progress').length,
+          reviewTasks: tasks.filter(t => t.status === 'review').length,
+          doneTasks: tasks.filter(t => t.status === 'done').length
+        }
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                summary,
+                phases,
+                tasks,
+                dependencies: deps,
+                qualityGates: gates
+              }, null, 2)
+            }
+          ]
+        }
+      }
+
+      case 'sdd_get_active_task': {
+        if (args?.taskId) {
+          const compiled = compileAgentContext(projectRoot, args.taskId)
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(compiled, null, 2)
+              }
+            ]
+          }
+        }
+
+        const activeTaskFile = path.join(sddDir, 'active_task.json')
+        const contextFile = path.join(govDir, 'agent-context.json')
+
+        let context = readJson(contextFile)
+        let activeTask = readJson(activeTaskFile)
+
+        if (!context || !activeTask) {
+          context = compileAgentContext(projectRoot, null)
+          activeTask = readJson(activeTaskFile)
+        }
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                activeTask,
+                agentContext: context
+              }, null, 2)
+            }
+          ]
+        }
+      }
+
+      case 'sdd_update_task_progress': {
+        const taskId = args?.taskId
+        if (!taskId) {
+          return { isError: true, content: [{ type: 'text', text: 'taskId es requerido.' }] }
+        }
+
+        if (args.status === 'done') {
+          const result = completeTaskAndAdvance(projectRoot, taskId)
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  message: `✓ Tarea ${taskId} completada con éxito. Plan actualizado y compuertas evaluadas.`,
+                  result
+                }, null, 2)
+              }
+            ]
+          }
+        }
+
+        const taskFile = path.join(execDir, 'tasks.json')
+        let tasks = readJson(taskFile, [])
+        const task = tasks.find(t => t.id === taskId)
+        if (!task) {
+          return { isError: true, content: [{ type: 'text', text: `Tarea ${taskId} no encontrada en execution/tasks.json` }] }
+        }
+
+        if (args.criterionId && Array.isArray(task.acceptanceCriteria)) {
+          const c = task.acceptanceCriteria.find(item => item.id === args.criterionId)
+          if (c) c.done = Boolean(args.done)
+        } else if (args.criterionIndex !== undefined && Array.isArray(task.acceptanceCriteria) && task.acceptanceCriteria[args.criterionIndex]) {
+          task.acceptanceCriteria[args.criterionIndex].done = Boolean(args.done)
+        }
+
+        if (args.status) task.status = args.status
+        if (args.agentName) task.assignedTo = args.agentName
+
+        const totalCrit = task.acceptanceCriteria?.length || 0
+        const doneCrit = task.acceptanceCriteria?.filter(c => c.done).length || 0
+        if (totalCrit > 0 && doneCrit === totalCrit && args.status !== 'done') {
+          task.status = 'review'
+        }
+
+        writeJson(taskFile, tasks)
+
+        if (task.storyId) {
+          const sFile = path.join(storiesDir, `${task.storyId}.json`)
+          const story = readJson(sFile)
+          if (story) {
+            if (args.status) story.status = args.status
+            if (args.agentName) story.assignedTo = args.agentName
+            if (Array.isArray(story.acceptanceCriteria) && Array.isArray(task.acceptanceCriteria)) {
+              story.acceptanceCriteria = task.acceptanceCriteria
+            }
+            writeJson(sFile, story)
+          }
+        }
+
+        const currentActive = readJson(path.join(sddDir, 'active_task.json'))
+        if (currentActive?.taskId === taskId) {
+          compileAgentContext(projectRoot, taskId)
+        }
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                message: `Progreso actualizado para ${taskId}. Estado: ${task.status} (${doneCrit}/${totalCrit} criterios completados).`,
+                task
+              }, null, 2)
+            }
+          ]
+        }
+      }
+
+      case 'sdd_get_uml_diagrams': {
+        const umlPath = path.join(sddDir, 'sequences', 'uml-diagrams.json')
+        let diags = readJson(umlPath, [])
+        if (args?.category && args.category !== 'all') {
+          diags = diags.filter(d => d.category === args.category)
+        }
+        if (args?.diagramId) {
+          diags = diags.filter(d => d.id === args.diagramId)
+        }
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                total: diags.length,
+                diagrams: diags
               }, null, 2)
             }
           ]

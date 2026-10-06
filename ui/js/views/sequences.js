@@ -1,46 +1,108 @@
-// SDD Studio — Sequences & State Machines UML Perspective View
+// SDD Studio — 14 UML Diagrams OMG Suite Perspective View
 
 import { state } from '../state.js';
 import { showToast, copyTextToClipboard } from '../utils.js';
 import { switchTab } from '../navigation.js';
 
-export function switchUmlType(type) {
-  state.activeUmlType = type;
-  const btnSeq = document.getElementById('uml-mode-sequence');
-  const btnFsm = document.getElementById('uml-mode-state');
-  if (type === 'sequence') {
-    btnSeq?.classList.add('bg-white', 'text-purple-950', 'shadow-2xs', 'font-black');
-    btnSeq?.classList.remove('text-zinc-600');
-    btnFsm?.classList.remove('bg-white', 'text-purple-950', 'shadow-2xs', 'font-black');
-    btnFsm?.classList.add('text-zinc-600');
+// Icons mapping for all 14 UML diagram types
+const UML_TYPE_ICONS = {
+  class: 'box',
+  object: 'layers',
+  component: 'package',
+  deployment: 'server',
+  package: 'folder',
+  composite: 'cpu',
+  profile: 'tag',
+  usecase: 'users',
+  activity: 'zap',
+  state: 'refresh-cw',
+  sequence: 'git-commit',
+  communication: 'share-2',
+  timing: 'clock',
+  'interaction-overview': 'workflow'
+};
+
+export function switchUmlCategory(category) {
+  state.activeUmlCategory = category;
+  
+  const btnAll = document.getElementById('uml-cat-all');
+  const btnStruct = document.getElementById('uml-cat-structural');
+  const btnBehav = document.getElementById('uml-cat-behavioral');
+
+  // Reset classes
+  [btnAll, btnStruct, btnBehav].forEach(btn => {
+    btn?.classList.remove('bg-white', 'text-purple-950', 'shadow-2xs', 'font-black');
+    btn?.classList.add('text-zinc-600');
+  });
+
+  if (category === 'structural') {
+    btnStruct?.classList.add('bg-white', 'text-purple-950', 'shadow-2xs', 'font-black');
+    btnStruct?.classList.remove('text-zinc-600');
+  } else if (category === 'behavioral') {
+    btnBehav?.classList.add('bg-white', 'text-purple-950', 'shadow-2xs', 'font-black');
+    btnBehav?.classList.remove('text-zinc-600');
   } else {
-    btnFsm?.classList.add('bg-white', 'text-purple-950', 'shadow-2xs', 'font-black');
-    btnFsm?.classList.remove('text-zinc-600');
-    btnSeq?.classList.remove('bg-white', 'text-purple-950', 'shadow-2xs', 'font-black');
-    btnSeq?.classList.add('text-zinc-600');
+    btnAll?.classList.add('bg-white', 'text-purple-950', 'shadow-2xs', 'font-black');
+    btnAll?.classList.remove('text-zinc-600');
+  }
+
+  const categoryPill = document.getElementById('uml-category-pill');
+  if (categoryPill) {
+    if (category === 'structural') {
+      categoryPill.innerText = '📐 7 Estructurales';
+      categoryPill.className = 'px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200';
+    } else if (category === 'behavioral') {
+      categoryPill.innerText = '⚡ 7 de Comportamiento';
+      categoryPill.className = 'px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200';
+    } else {
+      categoryPill.innerText = '14 Diagramas Oficiales';
+      categoryPill.className = 'px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-zinc-100 text-zinc-600 border border-zinc-200';
+    }
+  }
+
+  renderSequences();
+}
+
+export function selectUmlDiagram(diagId) {
+  state.activeUmlDiagramId = diagId;
+  renderSequences();
+}
+
+// Backwards compatibility functions
+export function switchUmlType(type) {
+  if (type === 'state') {
+    state.activeUmlCategory = 'behavioral';
+    state.activeUmlDiagramId = 'UML-10-STATE';
+  } else if (type === 'sequence') {
+    state.activeUmlCategory = 'behavioral';
+    state.activeUmlDiagramId = 'UML-11-SEQUENCE';
+  } else {
+    state.activeUmlType = type;
   }
   renderSequences();
 }
 
 export function selectSequence(seqId) {
   state.activeSequenceId = seqId;
+  state.activeUmlDiagramId = seqId;
   renderSequences();
 }
 
 export function selectStateMachine(fsmId) {
   state.activeStateId = fsmId;
+  state.activeUmlDiagramId = fsmId;
   renderSequences();
 }
 
 export function openSequenceForFlow(flowId) {
   switchTab('sequences');
-  state.activeUmlType = 'sequence';
-  const seqs = Array.isArray(state.appState?.sequences) ? state.appState.sequences : (state.appState?.sequences ? [state.appState.sequences] : []);
-  const match = seqs.find(s => s.flowId === flowId || (s.id && s.id.toLowerCase().includes(flowId.toLowerCase())));
+  state.activeUmlCategory = 'all';
+  const allDiags = getAllDiagramsList();
+  const match = allDiags.find(d => d.flowId === flowId || (d.id && d.id.toLowerCase().includes(flowId.toLowerCase())) || d.type === 'sequence');
   if (match) {
-    state.activeSequenceId = match.id;
+    state.activeUmlDiagramId = match.id;
   }
-  switchUmlType('sequence');
+  renderSequences();
 }
 
 export function buildMermaidFromSteps(seq) {
@@ -59,7 +121,7 @@ export function buildMermaidFromSteps(seq) {
     });
     participants.forEach(p => {
       const id = p.replace(/[^a-zA-Z0-9]/g, '_');
-      const isUser = p.toLowerCase().includes('usuario') || p.toLowerCase().includes('cliente') || p.toLowerCase().includes('comprador') || p.toLowerCase().includes('admin') || p.toLowerCase().includes('repartidor');
+      const isUser = p.toLowerCase().includes('usuario') || p.toLowerCase().includes('cliente') || p.toLowerCase().includes('dev') || p.toLowerCase().includes('admin');
       if (isUser) {
         code += `  actor ${id} as ${p}\n`;
       } else {
@@ -77,185 +139,189 @@ export function buildMermaidFromSteps(seq) {
   return null;
 }
 
-export async function renderSequences() {
-  const rawSeqs = state.appState?.sequences;
-  const seqs = Array.isArray(rawSeqs) ? rawSeqs : (rawSeqs && (rawSeqs.mermaid || rawSeqs.steps || rawSeqs.name) ? [rawSeqs] : []);
+function getAllDiagramsList() {
+  const loadedUml = Array.isArray(state.appState?.umlDiagrams) ? state.appState.umlDiagrams : [];
+  if (loadedUml.length > 0) {
+    return loadedUml;
+  }
+
+  // Fallback a secuencias y state machines si umlDiagrams aún no se ha sincronizado
+  const seqs = Array.isArray(state.appState?.sequences) ? state.appState.sequences : (state.appState?.sequences ? [state.appState.sequences] : []);
   const fsms = Array.isArray(state.appState?.stateMachines) ? state.appState.stateMachines : (state.appState?.stateMachines ? [state.appState.stateMachines] : []);
 
-  const tabBadgeSeq = document.getElementById('tab-badge-sequences');
-  const totalUml = seqs.length + fsms.length;
-  if (tabBadgeSeq) tabBadgeSeq.innerText = `${totalUml} UML`;
+  const list = [];
+  seqs.forEach((s, idx) => {
+    list.push({
+      id: s.id || `SEQ-${idx + 1}`,
+      category: 'behavioral',
+      categoryName: 'Comportamiento (Interacción)',
+      type: 'sequence',
+      typeName: 'Diagrama de Secuencia',
+      name: s.name || 'Secuencia de Interacción',
+      description: s.description || 'Interacción técnica paso a paso entre actores y servicios.',
+      mermaid: s.mermaid || buildMermaidFromSteps(s),
+      elements: s.actors || ['Dev', 'Server']
+    });
+  });
 
-  const seqLabel = document.getElementById('uml-tab-seq-label');
-  const fsmLabel = document.getElementById('uml-tab-fsm-label');
-  if (seqLabel) seqLabel.innerText = `Secuencias UML (${seqs.length})`;
-  if (fsmLabel) fsmLabel.innerText = `Máquinas de Estado (${fsms.length})`;
+  fsms.forEach((f, idx) => {
+    list.push({
+      id: f.id || `FSM-${idx + 1}`,
+      category: 'behavioral',
+      categoryName: 'Comportamiento',
+      type: 'state',
+      typeName: 'Máquina de Estados (FSM)',
+      name: f.name || `Estados de ${f.entity || 'Entidad'}`,
+      description: f.description || 'Estados y transiciones válidas del modelo.',
+      mermaid: f.mermaid || null,
+      elements: (f.states || []).map(st => st.name || st)
+    });
+  });
+
+  return list;
+}
+
+export async function renderSequences() {
+  const allDiagrams = getAllDiagramsList();
+  const currentCategory = state.activeUmlCategory || 'all';
+
+  // Actualizar badge lateral en Cockpit
+  const tabBadgeSeq = document.getElementById('tab-badge-sequences');
+  if (tabBadgeSeq) {
+    tabBadgeSeq.innerText = `${allDiagrams.length} UML`;
+  }
+
+  // Filtrar según categoría activa
+  let filtered = allDiagrams;
+  if (currentCategory === 'structural') {
+    filtered = allDiagrams.filter(d => d.category === 'structural');
+  } else if (currentCategory === 'behavioral') {
+    filtered = allDiagrams.filter(d => d.category === 'behavioral');
+  }
 
   const pillsContainer = document.getElementById('uml-pills-container');
   const metaCard = document.getElementById('uml-metadata-card');
   const badgeEl = document.getElementById('uml-diag-badge');
-  const flowBadgeEl = document.getElementById('uml-diag-flow');
+  const catBadgeEl = document.getElementById('uml-diag-cat-badge');
+  const typeBadgeEl = document.getElementById('uml-diag-flow');
   const titleEl = document.getElementById('uml-diag-title');
   const descEl = document.getElementById('uml-diag-desc');
   const actorsContainer = document.getElementById('uml-diag-actors');
   const codeView = document.getElementById('mermaid-code-view');
   const renderOutput = document.getElementById('mermaid-svg-output');
   const selectorCount = document.getElementById('uml-selector-count');
-  const selectorTitle = document.getElementById('uml-selector-title');
 
   if (pillsContainer) pillsContainer.innerHTML = '';
 
-  let mermaidCode = null;
-
-  if (state.activeUmlType === 'sequence') {
-    if (selectorTitle) selectorTitle.innerText = 'Secuencias de Procesos por Flujo:';
-    if (seqs.length === 0) {
-      if (metaCard) metaCard.classList.add('hidden');
-      if (renderOutput) {
-        renderOutput.innerHTML = `
-          <div class="py-12 text-center space-y-3">
-            <div class="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mx-auto">
-              <i data-lucide="workflow" class="w-6 h-6"></i>
-            </div>
-            <h3 class="text-sm font-bold text-zinc-900">No hay diagramas de secuencia registrados</h3>
-            <p class="text-xs text-zinc-500 max-w-sm mx-auto">Cuando definas flujos en el Chat, tu Agente de IA creará las secuencias técnicas correspondientes aquí.</p>
+  if (filtered.length === 0) {
+    if (metaCard) metaCard.classList.add('hidden');
+    if (renderOutput) {
+      renderOutput.innerHTML = `
+        <div class="py-12 text-center space-y-3">
+          <div class="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mx-auto">
+            <i data-lucide="workflow" class="w-6 h-6"></i>
           </div>
-        `;
-        if (window.lucide) window.lucide.createIcons();
-      }
-      return;
-    }
-
-    if (metaCard) metaCard.classList.remove('hidden');
-
-    // Determinar secuencia activa
-    if (!state.activeSequenceId || !seqs.some(s => s.id === state.activeSequenceId)) {
-      state.activeSequenceId = seqs[0].id;
-    }
-
-    const activeSeq = seqs.find(s => s.id === state.activeSequenceId) || seqs[0];
-    if (selectorCount) selectorCount.innerText = `${activeSeq.id} (${seqs.indexOf(activeSeq) + 1} de ${seqs.length})`;
-
-    // Renderizar pills para todas las secuencias
-    seqs.forEach(s => {
-      const isSelected = s.id === activeSeq.id;
-      const btn = document.createElement('button');
-      btn.className = `px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer flex items-center gap-1.5 ${
-        isSelected
-          ? 'bg-purple-600 text-white shadow-sm shadow-purple-600/20 ring-1 ring-purple-600'
-          : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-200/80'
-      }`;
-      const flowName = s.flowId ? (state.appState?.flows?.find(f => f.id === s.flowId)?.name || s.flowId) : null;
-      btn.innerHTML = `
-        <span class="font-mono text-[10px] ${isSelected ? 'text-purple-200' : 'text-zinc-500'} font-bold">${s.id || 'SEQ'}</span>
-        <span class="truncate max-w-[160px] sm:max-w-[220px]">${s.name}</span>
-        ${flowName ? `<span class="hidden lg:inline text-[9px] px-1 rounded ${isSelected ? 'bg-purple-700 text-purple-100' : 'bg-zinc-200 text-zinc-600'}">Flujo</span>` : ''}
+          <h3 class="text-sm font-bold text-zinc-900">No hay diagramas en esta categoría</h3>
+          <p class="text-xs text-zinc-500 max-w-sm mx-auto">Selecciona "Todos" para explorar la suite completa de 14 diagramas UML.</p>
+        </div>
       `;
-      btn.onclick = () => selectSequence(s.id);
-      pillsContainer?.appendChild(btn);
-    });
-
-    // Metadatos
-    if (badgeEl) badgeEl.innerText = activeSeq.id || 'SEQ';
-    if (flowBadgeEl) {
-      const matchedFlow = state.appState?.flows?.find(f => f.id === activeSeq.flowId);
-      flowBadgeEl.innerText = matchedFlow ? `Flujo: ${matchedFlow.name}` : (activeSeq.flowId ? `Flujo: ${activeSeq.flowId}` : 'Flujo General');
+      if (window.lucide) window.lucide.createIcons();
     }
-    if (titleEl) titleEl.innerText = activeSeq.name;
-    if (descEl) descEl.innerText = activeSeq.description || 'Interacción técnica paso a paso entre actores y servicios.';
-
-    // Actores
-    if (actorsContainer) {
-      actorsContainer.innerHTML = '';
-      const actors = activeSeq.actors || [];
-      actors.forEach(act => {
-        const tag = document.createElement('span');
-        tag.className = 'px-2 py-0.5 rounded-md bg-white border border-purple-200/80 text-[10px] font-mono font-medium text-zinc-700 shadow-2xs';
-        tag.innerText = act;
-        actorsContainer.appendChild(tag);
-      });
-    }
-
-    mermaidCode = buildMermaidFromSteps(activeSeq);
-  } else {
-    // Modo Máquinas de Estado (FSM)
-    if (selectorTitle) selectorTitle.innerText = 'Ciclos de Vida y Máquinas de Estado (FSM):';
-    if (fsms.length === 0) {
-      if (metaCard) metaCard.classList.add('hidden');
-      if (renderOutput) {
-        renderOutput.innerHTML = `
-          <div class="py-12 text-center space-y-3">
-            <div class="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
-              <i data-lucide="refresh-cw" class="w-6 h-6"></i>
-            </div>
-            <h3 class="text-sm font-bold text-zinc-900">No hay máquinas de estado registradas</h3>
-            <p class="text-xs text-zinc-500 max-w-sm mx-auto">Las máquinas de estado modelan el ciclo de vida de tus entidades (ej: Órdenes, Pagos, Sesiones).</p>
-          </div>
-        `;
-        if (window.lucide) window.lucide.createIcons();
-      }
-      return;
-    }
-
-    if (metaCard) metaCard.classList.remove('hidden');
-
-    if (!state.activeStateId || !fsms.some(f => f.id === state.activeStateId)) {
-      state.activeStateId = fsms[0].id;
-    }
-
-    const activeFsm = fsms.find(f => f.id === state.activeStateId) || fsms[0];
-    if (selectorCount) selectorCount.innerText = `${activeFsm.id} (${fsms.indexOf(activeFsm) + 1} de ${fsms.length})`;
-
-    // Pills de FSM
-    fsms.forEach(f => {
-      const isSelected = f.id === activeFsm.id;
-      const btn = document.createElement('button');
-      btn.className = `px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer flex items-center gap-1.5 ${
-        isSelected
-          ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20 ring-1 ring-indigo-600'
-          : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-200/80'
-      }`;
-      btn.innerHTML = `
-        <span class="font-mono text-[10px] ${isSelected ? 'text-indigo-200' : 'text-zinc-500'} font-bold">${f.id || 'FSM'}</span>
-        <span class="truncate max-w-[180px] sm:max-w-[240px]">${f.name || f.entity}</span>
-      `;
-      btn.onclick = () => selectStateMachine(f.id);
-      pillsContainer?.appendChild(btn);
-    });
-
-    // Metadatos FSM
-    if (badgeEl) badgeEl.innerText = activeFsm.id || 'FSM';
-    if (flowBadgeEl) flowBadgeEl.innerText = `Entidad: ${activeFsm.entity || 'Core'}`;
-    if (titleEl) titleEl.innerText = activeFsm.name;
-    if (descEl) descEl.innerText = activeFsm.description || 'Estados válidos y transiciones deterministas del modelo.';
-
-    // Estados tags
-    if (actorsContainer) {
-      actorsContainer.innerHTML = '';
-      const states = activeFsm.states || [];
-      states.forEach(st => {
-        const tag = document.createElement('span');
-        tag.className = 'px-2 py-0.5 rounded-md bg-white border border-indigo-200 text-[10px] font-mono font-bold text-indigo-900 shadow-2xs';
-        tag.innerText = st.name || st;
-        actorsContainer.appendChild(tag);
-      });
-    }
-
-    mermaidCode = activeFsm.mermaid || null;
+    return;
   }
 
-  // Renderizar Mermaid Code
-  if (codeView) codeView.innerText = mermaidCode || '# Sin código Mermaid';
+  if (metaCard) metaCard.classList.remove('hidden');
+
+  // Determinar diagrama activo
+  if (!state.activeUmlDiagramId || !filtered.some(d => d.id === state.activeUmlDiagramId)) {
+    state.activeUmlDiagramId = filtered[0].id;
+  }
+
+  const activeDiag = filtered.find(d => d.id === state.activeUmlDiagramId) || filtered[0];
+  const activeIndex = filtered.indexOf(activeDiag) + 1;
+
+  if (selectorCount) {
+    selectorCount.innerText = `${activeDiag.id} (${activeIndex} de ${filtered.length})`;
+  }
+
+  // Renderizar pills horizontales
+  filtered.forEach(d => {
+    const isSelected = d.id === activeDiag.id;
+    const btn = document.createElement('button');
+    const iconName = UML_TYPE_ICONS[d.type] || 'git-commit';
+    const isStructural = d.category === 'structural';
+
+    btn.className = `px-3 py-2 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer flex items-center gap-2 ${
+      isSelected
+        ? (isStructural
+            ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/20 ring-1 ring-blue-600'
+            : 'bg-purple-600 text-white shadow-sm shadow-purple-600/20 ring-1 ring-purple-600')
+        : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-200/80'
+    }`;
+
+    btn.innerHTML = `
+      <i data-lucide="${iconName}" class="w-3.5 h-3.5 ${isSelected ? 'text-white' : (isStructural ? 'text-blue-600' : 'text-purple-600')}"></i>
+      <span class="font-mono text-[10px] ${isSelected ? 'text-white/80' : 'text-zinc-500'} font-bold">${d.number ? String(d.number).padStart(2, '0') : d.id}</span>
+      <span class="truncate max-w-[150px] sm:max-w-[210px]">${d.typeName || d.name}</span>
+      <span class="text-[9px] px-1 py-0.2 rounded font-mono ${isSelected ? 'bg-white/20 text-white' : (isStructural ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-purple-50 text-purple-700 border border-purple-200')}">
+        ${isStructural ? 'ESTR' : 'COMP'}
+      </span>
+    `;
+
+    btn.onclick = () => selectUmlDiagram(d.id);
+    pillsContainer?.appendChild(btn);
+  });
+
+  // Metadatos del diagrama activo
+  if (badgeEl) badgeEl.innerText = activeDiag.id || 'UML';
+  if (catBadgeEl) {
+    const isStructural = activeDiag.category === 'structural';
+    catBadgeEl.innerText = isStructural ? '📐 Estructural' : '⚡ Comportamiento';
+    catBadgeEl.className = `px-2 py-0.5 rounded-md text-[10px] font-mono font-bold border ${
+      isStructural ? 'bg-blue-50 text-blue-800 border-blue-200' : 'bg-purple-50 text-purple-800 border-purple-200'
+    }`;
+  }
+  if (typeBadgeEl) typeBadgeEl.innerText = activeDiag.typeName || 'Diagrama UML';
+  if (titleEl) titleEl.innerText = activeDiag.name || 'Diagrama UML';
+  if (descEl) descEl.innerText = activeDiag.description || 'Definición de modelo y arquitectura del sistema.';
+
+  // Renderizar tags de actores/elementos
+  if (actorsContainer) {
+    actorsContainer.innerHTML = '';
+    const tags = activeDiag.elements || activeDiag.actors || [];
+    tags.forEach(tagText => {
+      const tag = document.createElement('span');
+      tag.className = 'px-2 py-0.5 rounded-md bg-white border border-purple-200/80 text-[10px] font-mono font-medium text-zinc-700 shadow-2xs';
+      tag.innerText = tagText;
+      actorsContainer.appendChild(tag);
+    });
+  }
+
+  // Obtener código Mermaid
+  const mermaidCode = activeDiag.mermaid || buildMermaidFromSteps(activeDiag);
+
+  // Renderizar código en el visualizador
+  if (codeView) {
+    codeView.innerText = mermaidCode || '# Sin especificación Mermaid disponible';
+  }
 
   if (renderOutput && window.mermaid && mermaidCode) {
     try {
-      renderOutput.innerHTML = '<div class="text-xs text-zinc-400 font-mono py-8 flex items-center justify-center gap-2"><span class="w-2 h-2 rounded-full bg-purple-600 animate-ping"></span>Renderizando diagrama interactivo...</div>';
+      renderOutput.innerHTML = '<div class="text-xs text-zinc-400 font-mono py-12 flex items-center justify-center gap-2"><span class="w-2 h-2 rounded-full bg-purple-600 animate-ping"></span>Renderizando diagrama interactivo UML...</div>';
       const uniqueId = 'mermaid-uml-' + Math.floor(Math.random() * 100000);
       const { svg } = await window.mermaid.render(uniqueId, mermaidCode);
       renderOutput.innerHTML = svg;
     } catch (err) {
       console.warn('Error renderizando Mermaid:', err);
-      renderOutput.innerHTML = `<div class="p-4 bg-rose-50 text-rose-800 rounded-xl text-xs font-mono border border-rose-200">No se pudo procesar la sintaxis visual. Usa la vista de código.</div>`;
+      renderOutput.innerHTML = `
+        <div class="p-6 bg-rose-50 text-rose-800 rounded-2xl text-xs font-mono border border-rose-200 max-w-lg mx-auto text-center space-y-2">
+          <div class="font-bold flex items-center justify-center gap-1.5 text-rose-900">
+            <i data-lucide="alert-triangle" class="w-4 h-4 text-rose-600"></i>
+            <span>No se pudo procesar la sintaxis visual Mermaid</span>
+          </div>
+          <p class="text-[11px] text-rose-700">Puedes inspeccionar el código fuente haciendo clic en <strong>Ver Código</strong>.</p>
+        </div>
+      `;
     }
   }
 
@@ -281,5 +347,5 @@ export function toggleMermaidRaw() {
 
 export function copyMermaid() {
   const txt = document.getElementById('mermaid-code-view')?.innerText || '';
-  copyTextToClipboard(txt, 'Mermaid copiado al portapapeles');
+  copyTextToClipboard(txt, 'Código Mermaid copiado al portapapeles');
 }

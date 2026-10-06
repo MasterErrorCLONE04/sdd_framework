@@ -4,6 +4,12 @@ import { state } from '../state.js';
 
 export function renderQA() {
   const suites = state.appState?.testPlan?.testSuites || state.appState?.testPlan?.suites || [];
+  const tabBadgeQa = document.getElementById('tab-badge-qa');
+  if (tabBadgeQa) {
+    const totalCases = suites.reduce((acc, s) => acc + (s.testCases?.length || 0), 0);
+    tabBadgeQa.innerText = totalCases > 0 ? `${totalCases} TCs` : String(suites.length);
+  }
+
   const container = document.getElementById('qa-suites-container');
   if (!container) return;
 

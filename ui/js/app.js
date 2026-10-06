@@ -33,6 +33,7 @@ import {
   copyGenesisOrderToClipboard,
   triggerLiveCockpitMorph,
   updateGenesisStepper,
+  advanceStageFromChat,
   switchPreviewTab,
   sendQuickAction
 } from './chat.js';
@@ -47,6 +48,8 @@ import {
 } from './views/discovery.js';
 import { renderStories, toggleCriterion, confirmOrigin } from './views/stories.js';
 import {
+  switchUmlCategory,
+  selectUmlDiagram,
   switchUmlType,
   selectSequence,
   selectStateMachine,
@@ -77,7 +80,7 @@ import { renderDatabase } from './views/database.js';
 import { renderRolesAndRisks } from './views/roles.js';
 import { renderQA } from './views/qa.js';
 import { renderDrift, runConvergenceAudit } from './views/drift.js';
-import { setUiuxFilter, filterUiuxScreens, rescanUiuxViews, renderUIUX } from './views/uiux.js';
+import { setUiuxSubTab, setUiuxFilter, filterUiuxScreens, rescanUiuxViews, renderUIUX } from './views/uiux.js';
 import { renderKanban, updateStoryStatus } from './views/kanban.js';
 import { loadComponents } from './componentLoader.js';
 
@@ -125,6 +128,7 @@ window.confirmAndOpenCockpit = confirmAndOpenCockpit;
 window.copyGenesisOrderToClipboard = copyGenesisOrderToClipboard;
 window.triggerLiveCockpitMorph = triggerLiveCockpitMorph;
 window.updateGenesisStepper = updateGenesisStepper;
+window.advanceStageFromChat = advanceStageFromChat;
 window.switchPreviewTab = switchPreviewTab;
 window.sendQuickAction = sendQuickAction;
 window.toggleGate = toggleGate;
@@ -137,6 +141,8 @@ window.toggleNA = toggleNA;
 window.renderStories = renderStories;
 window.toggleCriterion = toggleCriterion;
 window.confirmOrigin = confirmOrigin;
+window.switchUmlCategory = switchUmlCategory;
+window.selectUmlDiagram = selectUmlDiagram;
 window.switchUmlType = switchUmlType;
 window.selectSequence = selectSequence;
 window.selectStateMachine = selectStateMachine;
@@ -164,6 +170,7 @@ window.renderDatabase = renderDatabase;
 window.renderRolesAndRisks = renderRolesAndRisks;
 window.renderQA = renderQA;
 window.renderDrift = renderDrift;
+window.setUiuxSubTab = setUiuxSubTab;
 window.setUiuxFilter = setUiuxFilter;
 window.filterUiuxScreens = filterUiuxScreens;
 window.rescanUiuxViews = rescanUiuxViews;
