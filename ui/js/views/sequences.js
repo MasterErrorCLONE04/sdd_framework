@@ -182,8 +182,35 @@ function getAllDiagramsList() {
 }
 
 export async function renderSequences() {
+  // Si umlDiagrams aún no está cargado en memoria, sincronizarlo directamente desde la API
+  if (!Array.isArray(state.appState?.umlDiagrams) || state.appState.umlDiagrams.length === 0) {
+    try {
+      const res = await fetch('/api/uml');
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.diagrams) && data.diagrams.length > 0) {
+          if (!state.appState) state.appState = {};
+          state.appState.umlDiagrams = data.diagrams;
+        }
+      }
+    } catch {
+      // fallback
+    }
+  }
+
   const allDiagrams = getAllDiagramsList();
   const currentCategory = state.activeUmlCategory || 'all';
+
+  const structCount = allDiagrams.filter(d => d.category === 'structural').length;
+  const behavCount = allDiagrams.filter(d => d.category === 'behavioral').length;
+
+  // Actualizar conteos dinámicos en los botones superiores
+  const lblAll = document.getElementById('uml-cat-all-label');
+  const lblStruct = document.getElementById('uml-cat-struct-label');
+  const lblBehav = document.getElementById('uml-cat-behav-label');
+  if (lblAll) lblAll.innerText = `Todos (${allDiagrams.length})`;
+  if (lblStruct) lblStruct.innerText = `📐 Estructurales (${structCount})`;
+  if (lblBehav) lblBehav.innerText = `⚡ Comportamiento (${behavCount})`;
 
   // Actualizar badge lateral en Cockpit
   const tabBadgeSeq = document.getElementById('tab-badge-sequences');
@@ -312,7 +339,27 @@ export async function renderSequences() {
       const { svg } = await window.mermaid.render(uniqueId, mermaidCode);
       renderOutput.innerHTML = svg;
     } catch (err) {
-      console.warn('Error renderizando Mermaid:', err);
+      console.warn('Error renderizando Mermaid, intentando sanitización automática:', err);
+      // Auto-sanitize fallback: envolver etiquetas de subgrafos y nodos con caracteres especiales en comillas
+      const sanitizedCode = mermaidCode
+        .replace(/subgraph\s+([a-zA-Z0-9_]+)\s+\[([^"\]\r\n]+)\]/g, 'subgraph $1 ["$2"]')
+        .replace(/([a-zA-Z0-9_]+)\[([^"\]\r\n]+)\]/g, (match, id, text) => {
+          if (id === 'subgraph' || id === 'class') return match;
+          return `${id}["${text}"]`;
+        });
+
+      if (sanitizedCode !== mermaidCode) {
+        try {
+          const retryId = 'mermaid-retry-' + Math.floor(Math.random() * 100000);
+          const { svg } = await window.mermaid.render(retryId, sanitizedCode);
+          renderOutput.innerHTML = svg;
+          if (window.lucide) window.lucide.createIcons();
+          return;
+        } catch (retryErr) {
+          console.warn('Reintento con sanitización falló:', retryErr);
+        }
+      }
+
       renderOutput.innerHTML = `
         <div class="p-6 bg-rose-50 text-rose-800 rounded-2xl text-xs font-mono border border-rose-200 max-w-lg mx-auto text-center space-y-2">
           <div class="font-bold flex items-center justify-center gap-1.5 text-rose-900">

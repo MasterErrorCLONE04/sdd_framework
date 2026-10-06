@@ -11,6 +11,8 @@ import { discoverFlowsWithAi } from './flows-ai.js'
 import { reverseEngineerProjectWithAi } from './reverse-engineer.js'
 import { normalizeProjectModel, calculateProjectProgress, normalizeBusinessRule, normalizeUserFlow, normalizeBusinessFlow, normalizeTechStack, normalizeEndpoint, normalizeApiContract, normalizeDatabaseTable, normalizeDatabaseRelationship, normalizeScreen, normalizeWireframe, normalizeDesignSystem, normalizeExecutionPhase, normalizeExecutionTask, normalizeDependencyGraph, normalizeQualityGate } from './model-schema.js'
 import { compileAgentContext, dispatchTaskToAgent, completeTaskAndAdvance } from './agent-context.js'
+import { generateDefaultUmlSuite } from './uml-generator.js'
+export { generateDefaultUmlSuite }
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -500,6 +502,15 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
         if (fs.existsSync(umlPath)) {
           const loaded = readJsonFile(umlPath, [])
           umlDiagrams = Array.isArray(loaded) ? loaded : [loaded]
+        }
+        const hasBrokenSyntax = umlDiagrams.some(d => d.mermaid && (d.mermaid.includes('[Sistema Central:') || (d.id === 'UML-06-COMPOSITE' && !d.mermaid.includes('["Sistema Central:'))))
+        if (umlDiagrams.length === 0 || hasBrokenSyntax) {
+          umlDiagrams = generateDefaultUmlSuite(project?.name || path.basename(projectRoot), {
+            architecture,
+            sequences,
+            stateMachines
+          })
+          writeJsonFile(umlPath, umlDiagrams)
         }
 
         let screens = readJsonFile(path.join(uiDir, 'screens.json'), [])
@@ -1459,7 +1470,14 @@ export function createSddServer(projectRoot = process.cwd(), port = 3030) {
     // 3.055 Suite UML API GET /api/uml & POST /api/uml (14 Diagramas Oficiales OMG)
     if (url.pathname === '/api/uml' && req.method === 'GET') {
       const umlPath = path.join(seqDir, 'uml-diagrams.json')
-      const diagrams = readJsonFile(umlPath, [])
+      let diagrams = readJsonFile(umlPath, [])
+      const hasBrokenSyntax = Array.isArray(diagrams) && diagrams.some(d => d.mermaid && (d.mermaid.includes('[Sistema Central:') || (d.id === 'UML-06-COMPOSITE' && !d.mermaid.includes('["Sistema Central:'))))
+      if (!Array.isArray(diagrams) || diagrams.length === 0 || hasBrokenSyntax) {
+        const proj = readJsonFile(path.join(sddDir, 'project.json'), {})
+        const arch = readJsonFile(path.join(sddDir, 'architecture.json'), {})
+        diagrams = generateDefaultUmlSuite(proj?.name || path.basename(projectRoot), { architecture: arch })
+        writeJsonFile(umlPath, diagrams)
+      }
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({
         success: true,

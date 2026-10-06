@@ -506,7 +506,22 @@ export async function sendGenesisChatMessage() {
       const nonGoals = data.preview?.core?.scopeBoundaries?.explicitNonGoals || [];
       const stories = data.preview?.requirements?.userStories || [];
       const screens = data.preview?.uiUx?.screens || [];
-      const umlCode = data.preview?.sequences?.[0]?.mermaid || '';
+      const umlDiagrams = Array.isArray(data.preview?.umlDiagrams) && data.preview.umlDiagrams.length > 0
+        ? data.preview.umlDiagrams
+        : [];
+      if (!window._chatUmlSuites) window._chatUmlSuites = {};
+      window._chatUmlSuites[bubbleId] = umlDiagrams;
+
+      const defaultDiag = umlDiagrams[0] || {
+        id: 'UML-01-CLASS',
+        name: `Modelo de Clases (${projName})`,
+        category: 'structural',
+        categoryName: 'Estructural',
+        description: 'Estructura de entidades y relaciones sintetizadas por la IA.',
+        elements: ['Usuario', 'ControladorAPI', 'RepositorioDatos'],
+        mermaid: data.preview?.sequences?.[0]?.mermaid || 'classDiagram\n    class App'
+      };
+      const initialUmlCode = defaultDiag.mermaid || data.preview?.sequences?.[0]?.mermaid || '';
       const suggestedActions = data.preview?.suggestedActions || [];
 
       contentEl.innerHTML = `
@@ -532,6 +547,11 @@ export async function sendGenesisChatMessage() {
               <span>${stories.length} Historias</span>
               <span>•</span>
               <span>${screens.length} Pantallas</span>
+              <span>•</span>
+              <span class="text-indigo-600 font-bold flex items-center gap-1">
+                <i data-lucide="network" class="w-3 h-3"></i>
+                <span>${umlDiagrams.length || 14} Diagramas UML</span>
+              </span>
             </div>
           </div>
 
@@ -550,8 +570,8 @@ export async function sendGenesisChatMessage() {
               <span>Pantallas UI (${screens.length})</span>
             </button>
             <button id="${bubbleId}-tab-uml" onclick="switchPreviewTab('${bubbleId}', 'uml')" class="px-3 py-1.5 rounded-xl text-zinc-600 hover:text-zinc-950 flex items-center gap-1.5 transition-all cursor-pointer">
-              <i data-lucide="workflow" class="w-3.5 h-3.5 text-indigo-600"></i>
-              <span>Diagrama UML Secuencia</span>
+              <i data-lucide="network" class="w-3.5 h-3.5 text-indigo-600"></i>
+              <span>Suite UML (${umlDiagrams.length || 14})</span>
             </button>
           </div>
 
@@ -675,16 +695,138 @@ export async function sendGenesisChatMessage() {
             </div>
           </div>
 
-          <!-- Pane 4: Diagrama UML Secuencia Interactivo -->
-          <div id="${bubbleId}-pane-uml" class="p-4 space-y-3 hidden">
-            <div class="flex items-center justify-between text-[10px] font-mono font-black uppercase tracking-wider text-zinc-400">
-              <span>Diagrama de Secuencia Técnica (Actor -> Frontend -> Backend -> DB)</span>
-              <span class="text-indigo-600 font-bold">UML Mermaid</span>
+          <!-- Pane 4: Suite Completa de 14 Diagramas UML en Vivo -->
+          <div id="${bubbleId}-pane-uml" class="p-4 space-y-3.5 hidden">
+            <!-- Header Banner -->
+            <div class="p-3 bg-gradient-to-r from-indigo-50/90 via-purple-50/80 to-blue-50/80 border border-indigo-200/90 rounded-xl space-y-1">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1.5 text-xs font-black text-indigo-950">
+                  <i data-lucide="sparkles" class="w-4 h-4 text-indigo-600 animate-pulse"></i>
+                  <span>Suite Oficial de 14 Diagramas OMG UML (En Vivo)</span>
+                </div>
+                <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-white text-indigo-700 border border-indigo-200">
+                  7 Estructurales + 7 Comportamiento
+                </span>
+              </div>
+              <p class="text-[11px] text-zinc-600 leading-relaxed font-normal">
+                A medida que conversas con el agente sobre tu idea, la IA modela y actualiza los 14 diagramas arquitectónicos oficiales. Al aprobar en el último paso, quedarán automáticamente compilados en <code class="font-mono text-purple-700 font-bold">.sdd/sequences/uml-diagrams.json</code> para su inspección en la Cabina.
+              </p>
             </div>
-            <div id="${bubbleId}-uml-target" data-mermaid-code="${escapeHtml(umlCode)}" class="bg-white p-4 rounded-xl border border-zinc-200 shadow-2xs overflow-x-auto min-h-[140px] flex items-center justify-center text-xs">
+
+            <!-- Selector Controls Bar -->
+            <div class="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-zinc-100/80 border border-zinc-200 rounded-xl">
+              <div class="flex items-center gap-2 flex-1 min-w-[240px]">
+                <label for="${bubbleId}-uml-select" class="text-[11px] font-bold text-zinc-600 flex items-center gap-1 shrink-0">
+                  <i data-lucide="layers" class="w-3.5 h-3.5 text-indigo-600"></i>
+                  <span>Diagrama activo:</span>
+                </label>
+                <select
+                  id="${bubbleId}-uml-select"
+                  onchange="selectChatUmlDiagram('${bubbleId}', this.value)"
+                  class="w-full text-xs font-bold text-zinc-800 bg-white border border-zinc-300 rounded-lg px-2.5 py-1.5 focus:outline-hidden focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-2xs"
+                >
+                  <optgroup label="📐 7 Diagramas Estructurales">
+                    ${(umlDiagrams.filter(d => d.category === 'structural').length > 0
+                      ? umlDiagrams.filter(d => d.category === 'structural')
+                      : [
+                          { id: 'UML-01-CLASS', number: 1, name: 'Diagrama de Clases' },
+                          { id: 'UML-02-OBJECT', number: 2, name: 'Diagrama de Objetos' },
+                          { id: 'UML-03-COMPONENT', number: 3, name: 'Diagrama de Componentes' },
+                          { id: 'UML-04-DEPLOYMENT', number: 4, name: 'Diagrama de Despliegue' },
+                          { id: 'UML-05-PACKAGE', number: 5, name: 'Diagrama de Paquetes' },
+                          { id: 'UML-06-COMPOSITE', number: 6, name: 'Diagrama de Estructura Compuesta' },
+                          { id: 'UML-07-PROFILE', number: 7, name: 'Diagrama de Perfiles' }
+                        ]).map(d => `
+                          <option value="${d.id}" ${d.id === defaultDiag.id ? 'selected' : ''}>
+                            #${d.number || d.id.split('-')[1] || ''} — ${escapeHtml(d.typeName || d.name)}
+                          </option>
+                        `).join('')}
+                  </optgroup>
+                  <optgroup label="⚡ 7 Diagramas de Comportamiento">
+                    ${(umlDiagrams.filter(d => d.category === 'behavioral').length > 0
+                      ? umlDiagrams.filter(d => d.category === 'behavioral')
+                      : [
+                          { id: 'UML-08-USECASE', number: 8, name: 'Diagrama de Casos de Uso' },
+                          { id: 'UML-09-ACTIVITY', number: 9, name: 'Diagrama de Actividades' },
+                          { id: 'UML-10-STATE', number: 10, name: 'Máquina de Estados' },
+                          { id: 'UML-11-SEQUENCE', number: 11, name: 'Diagrama de Secuencia' },
+                          { id: 'UML-12-COMMUNICATION', number: 12, name: 'Diagrama de Comunicación' },
+                          { id: 'UML-13-TIMING', number: 13, name: 'Diagrama de Tiempo' },
+                          { id: 'UML-14-INTERACTION-OVERVIEW', number: 14, name: 'Visión Global de Interacción' }
+                        ]).map(d => `
+                          <option value="${d.id}" ${d.id === defaultDiag.id ? 'selected' : ''}>
+                            #${d.number || d.id.split('-')[1] || ''} — ${escapeHtml(d.typeName || d.name)}
+                          </option>
+                        `).join('')}
+                  </optgroup>
+                </select>
+              </div>
+
+              <!-- Quick category switch buttons -->
+              <div class="flex items-center gap-1 text-[10px] font-bold">
+                <button
+                  type="button"
+                  onclick="selectChatUmlDiagram('${bubbleId}', 'UML-01-CLASS')"
+                  class="px-2 py-1 rounded-md bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-700 cursor-pointer transition-all"
+                  title="Ver Diagrama de Clases"
+                >
+                  Clases
+                </button>
+                <button
+                  type="button"
+                  onclick="selectChatUmlDiagram('${bubbleId}', 'UML-11-SEQUENCE')"
+                  class="px-2 py-1 rounded-md bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-700 cursor-pointer transition-all"
+                  title="Ver Diagrama de Secuencia"
+                >
+                  Secuencia
+                </button>
+                <button
+                  type="button"
+                  onclick="selectChatUmlDiagram('${bubbleId}', 'UML-08-USECASE')"
+                  class="px-2 py-1 rounded-md bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-700 cursor-pointer transition-all"
+                  title="Ver Casos de Uso"
+                >
+                  Casos de Uso
+                </button>
+                <button
+                  type="button"
+                  onclick="selectChatUmlDiagram('${bubbleId}', 'UML-10-STATE')"
+                  class="px-2 py-1 rounded-md bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-700 cursor-pointer transition-all"
+                  title="Ver Máquina de Estados"
+                >
+                  Estados
+                </button>
+              </div>
+            </div>
+
+            <!-- Active Diagram Metadata Strip -->
+            <div class="p-3 bg-white rounded-xl border border-zinc-200/90 shadow-2xs space-y-1.5">
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                  <span id="${bubbleId}-uml-cat-badge" class="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold ${defaultDiag.category === 'behavioral' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}">
+                    ${escapeHtml(defaultDiag.categoryName || (defaultDiag.category === 'behavioral' ? 'Comportamiento' : 'Estructural'))}
+                  </span>
+                  <span id="${bubbleId}-uml-title" class="text-xs font-black text-zinc-950">
+                    ${escapeHtml(defaultDiag.name)}
+                  </span>
+                </div>
+                <span class="text-[9px] font-mono font-bold text-zinc-400">Mermaid.js SVG</span>
+              </div>
+              <p id="${bubbleId}-uml-desc" class="text-[11px] text-zinc-600 leading-relaxed font-normal">
+                ${escapeHtml(defaultDiag.description || '')}
+              </p>
+            </div>
+
+            <!-- Visual Diagram SVG Canvas -->
+            <div
+              id="${bubbleId}-uml-target"
+              data-current-id="${defaultDiag.id}"
+              data-mermaid-code="${escapeHtml(initialUmlCode)}"
+              class="bg-white p-4 rounded-xl border border-zinc-200 shadow-2xs overflow-x-auto min-h-[160px] flex items-center justify-center text-xs"
+            >
               <div class="text-zinc-400 flex items-center gap-2">
                 <i data-lucide="loader-2" class="w-4 h-4 animate-spin text-purple-600"></i>
-                <span>Renderizando diagrama de secuencia UML...</span>
+                <span>Renderizando diagrama UML...</span>
               </div>
             </div>
           </div>
@@ -1069,9 +1211,57 @@ export function sendQuickAction(actionText) {
   }
 }
 
+export function selectChatUmlDiagram(bubbleId, diagId) {
+  const suite = window._chatUmlSuites?.[bubbleId] || [];
+  const diag = suite.find(d => d.id === diagId || d.id?.toLowerCase() === diagId?.toLowerCase());
+  if (!diag) return;
+
+  const selectEl = document.getElementById(`${bubbleId}-uml-select`);
+  if (selectEl && selectEl.value !== diag.id) {
+    selectEl.value = diag.id;
+  }
+
+  const titleEl = document.getElementById(`${bubbleId}-uml-title`);
+  const descEl = document.getElementById(`${bubbleId}-uml-desc`);
+  const catBadgeEl = document.getElementById(`${bubbleId}-uml-cat-badge`);
+  const targetEl = document.getElementById(`${bubbleId}-uml-target`);
+
+  if (titleEl) titleEl.innerText = diag.name || diag.typeName;
+  if (descEl) descEl.innerText = diag.description || '';
+  if (catBadgeEl) {
+    catBadgeEl.innerText = diag.categoryName || (diag.category === 'behavioral' ? 'Comportamiento' : 'Estructural');
+    catBadgeEl.className = `px-2 py-0.5 rounded-full text-[9px] font-mono font-bold ${diag.category === 'behavioral' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}`;
+  }
+
+  if (targetEl && diag.mermaid && window.mermaid) {
+    targetEl.dataset.mermaidCode = diag.mermaid;
+    targetEl.dataset.currentId = diag.id;
+    targetEl.innerHTML = `
+      <div class="text-zinc-400 flex items-center gap-2">
+        <i data-lucide="loader-2" class="w-4 h-4 animate-spin text-purple-600"></i>
+        <span>Cargando ${escapeHtml(diag.name)}...</span>
+      </div>
+    `;
+    if (window.lucide) window.lucide.createIcons();
+
+    const renderId = `mermaid-chat-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    try {
+      window.mermaid.render(renderId, diag.mermaid).then(res => {
+        targetEl.innerHTML = res.svg;
+      }).catch(err => {
+        console.warn('Mermaid render error:', err);
+        targetEl.innerHTML = `<pre class="text-[10px] font-mono p-3 bg-zinc-100 rounded-xl overflow-x-auto text-zinc-800">${escapeHtml(diag.mermaid)}</pre>`;
+      });
+    } catch {
+      targetEl.innerHTML = `<pre class="text-[10px] font-mono p-3 bg-zinc-100 rounded-xl overflow-x-auto text-zinc-800">${escapeHtml(diag.mermaid)}</pre>`;
+    }
+  }
+}
+
 // Window global exposures
 window.updateGenesisStepper = updateGenesisStepper;
 window.advanceStageFromChat = advanceStageFromChat;
 window.switchPreviewTab = switchPreviewTab;
+window.selectChatUmlDiagram = selectChatUmlDiagram;
 window.sendQuickAction = sendQuickAction;
 

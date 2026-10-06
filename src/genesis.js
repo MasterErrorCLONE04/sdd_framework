@@ -3,6 +3,7 @@ import path from 'path'
 import { extractJsonFromAi } from './flows-ai.js'
 import { normalizeProjectModel, calculateProjectProgress, normalizeBusinessRule, normalizeUserFlow, normalizeBusinessFlow, normalizeTechStack, normalizeEndpoint, normalizeApiContract, normalizeDatabaseTable, normalizeDatabaseRelationship, normalizeScreen, normalizeWireframe, normalizeDesignSystem, normalizeExecutionPhase, normalizeExecutionTask, normalizeDependencyGraph, normalizeQualityGate, STAGES } from './model-schema.js'
 import { compileAgentContext } from './agent-context.js'
+import { generateDefaultUmlSuite } from './uml-generator.js'
 
 /**
  * Construcción de especificación de las 12 perspectivas
@@ -131,40 +132,43 @@ export function buildSpecFromAi(aiData, rawText = '', existingSpec = null) {
 
   // 5. Modelo ERD / Base de Datos definido por la IA o heredado
   const existingTables = existingSpec?.database?.tables || []
-  const rawTables = (Array.isArray(aiData.database?.tables) && aiData.database.tables.length > 0)
-    ? aiData.database.tables
-    : (Array.isArray(aiData.database) && aiData.database.length > 0
-        ? aiData.database
-        : (existingTables.length > 0
-            ? existingTables
-            : [
-                {
-                  id: 'tbl-01',
-                  table: 'users',
-                  description: 'Usuarios y credenciales del sistema',
-                  columns: [
-                    { name: 'id', type: 'UUID', isPk: true, notNull: true, unique: true },
-                    { name: 'email', type: 'VARCHAR(255)', notNull: true, unique: true },
-                    { name: 'role', type: 'VARCHAR(50)', notNull: true, default: "'user'" },
-                    { name: 'created_at', type: 'TIMESTAMP', notNull: true }
-                  ]
-                },
-                {
-                  id: 'tbl-02',
-                  table: 'items',
-                  description: `Entidad operativa principal de ${projName}`,
-                  columns: [
-                    { name: 'id', type: 'UUID', isPk: true, notNull: true, unique: true },
-                    { name: 'user_id', type: 'UUID', notNull: true },
-                    { name: 'title', type: 'VARCHAR(255)', notNull: true },
-                    { name: 'status', type: 'VARCHAR(50)', notNull: true, default: "'active'" },
-                    { name: 'created_at', type: 'TIMESTAMP', notNull: true }
-                  ],
-                  foreignKeys: [
-                    { column: 'user_id', referencedTable: 'users', referencedColumn: 'id' }
-                  ]
-                }
-              ]))
+  let rawTables = existingTables
+  if (Array.isArray(aiData.database?.tables) && aiData.database.tables.length > 0) {
+    rawTables = aiData.database.tables
+  } else if (Array.isArray(aiData.database) && aiData.database.length > 0) {
+    rawTables = aiData.database
+  } else if (Array.isArray(aiData.tables) && aiData.tables.length > 0) {
+    rawTables = aiData.tables
+  } else if (existingTables.length === 0) {
+    rawTables = [
+      {
+        id: 'tbl-01',
+        table: 'users',
+        description: 'Usuarios y credenciales del sistema',
+        columns: [
+          { name: 'id', type: 'UUID', isPk: true, notNull: true, unique: true },
+          { name: 'email', type: 'VARCHAR(255)', notNull: true, unique: true },
+          { name: 'role', type: 'VARCHAR(50)', notNull: true, default: "'user'" },
+          { name: 'created_at', type: 'TIMESTAMP', notNull: true }
+        ]
+      },
+      {
+        id: 'tbl-02',
+        table: 'items',
+        description: `Entidad operativa principal de ${projName}`,
+        columns: [
+          { name: 'id', type: 'UUID', isPk: true, notNull: true, unique: true },
+          { name: 'user_id', type: 'UUID', notNull: true },
+          { name: 'title', type: 'VARCHAR(255)', notNull: true },
+          { name: 'status', type: 'VARCHAR(50)', notNull: true, default: "'active'" },
+          { name: 'created_at', type: 'TIMESTAMP', notNull: true }
+        ],
+        foreignKeys: [
+          { column: 'user_id', referencedTable: 'users', referencedColumn: 'id' }
+        ]
+      }
+    ]
+  }
   const tables = rawTables.map(normalizeDatabaseTable)
 
   const relationships = (Array.isArray(aiData.database?.relationships) && aiData.database.relationships.length > 0
@@ -349,6 +353,25 @@ export function buildSpecFromAi(aiData, rawText = '', existingSpec = null) {
           : `stateDiagram-v2\n    [*] --> Borrador: Creación inicial\n    Borrador --> Validado: Verificación de reglas\n    Validado --> EnProceso: Autorizado para ejecución\n    EnProceso --> Completado: Cumplimiento exitoso\n    EnProceso --> Fallido: Excepción o rechazo\n    Completado --> [*]\n    Fallido --> [*]`
       }
     ],
+    umlDiagrams: (Array.isArray(aiData.umlDiagrams) && aiData.umlDiagrams.length > 0)
+      ? aiData.umlDiagrams
+      : generateDefaultUmlSuite(projName, {
+          architecture: { services },
+          services,
+          database: { tables, relationships },
+          tables,
+          relationships,
+          personas,
+          actors: personas,
+          stories,
+          userFlows: Array.isArray(aiData.userFlows) ? aiData.userFlows : existingSpec?.userFlows,
+          businessFlows: Array.isArray(aiData.businessFlows) ? aiData.businessFlows : existingSpec?.businessFlows,
+          screens: Array.isArray(aiData.screens) ? aiData.screens : existingSpec?.uiUx?.screens,
+          sequenceUml: (typeof aiData.sequenceUml === 'string' && aiData.sequenceUml.includes('sequenceDiagram')) ? aiData.sequenceUml : null,
+          stateMachine: (typeof aiData.stateMachine === 'string' && aiData.stateMachine.includes('stateDiagram')) ? aiData.stateMachine : null,
+          sequences: aiData.sequences || existingSpec?.sequences,
+          stateMachines: aiData.stateMachines || existingSpec?.stateMachines
+        }),
     uiUx: {
       screens: Array.isArray(aiData.screens) && aiData.screens.length > 0
         ? aiData.screens.map((sc, i) => normalizeScreen({
@@ -699,9 +722,11 @@ export function persistGenesisStage(projectRoot, stage, stageData = {}) {
   const execDir = path.join(sddDir, 'execution')
   const govDir = path.join(sddDir, 'governance')
   const uiDir = path.join(sddDir, 'ui-ux')
+  const seqDir = path.join(sddDir, 'sequences')
+  const dbDir = path.join(sddDir, 'database')
 
   // Asegurar carpetas
-  ;[sddDir, productDir, reqDir, flowsDir, archDir, apiDir, execDir, govDir, uiDir].forEach(d => {
+  ;[sddDir, productDir, reqDir, flowsDir, archDir, apiDir, execDir, govDir, uiDir, seqDir, dbDir].forEach(d => {
     if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true })
   })
 
@@ -790,6 +815,16 @@ export function persistGenesisStage(projectRoot, stage, stageData = {}) {
       if (stageData.contracts) {
         fs.writeFileSync(path.join(apiDir, 'contracts.json'), JSON.stringify(stageData.contracts.map(normalizeApiContract), null, 2), 'utf-8')
       }
+      const archUml = (Array.isArray(stageData.umlDiagrams) && stageData.umlDiagrams.length > 0)
+        ? stageData.umlDiagrams
+        : generateDefaultUmlSuite(project.name || 'Proyecto', {
+            architecture: stageData.architecture,
+            database: stageData.database,
+            tables: stageData.database?.tables || [],
+            relationships: stageData.database?.relationships || stageData.relationships || [],
+            stack: stageData.stack
+          })
+      fs.writeFileSync(path.join(seqDir, 'uml-diagrams.json'), JSON.stringify(archUml, null, 2), 'utf-8')
       project.stage = 'ux'
       project.progress = Math.max(project.progress || 0, 80)
       break
@@ -826,6 +861,13 @@ export function persistGenesisStage(projectRoot, stage, stageData = {}) {
       if (stageData.qualityGates) {
         fs.writeFileSync(path.join(govDir, 'quality-gates.json'), JSON.stringify(stageData.qualityGates.map(normalizeQualityGate), null, 2), 'utf-8')
       }
+      const execUml = (Array.isArray(stageData.umlDiagrams) && stageData.umlDiagrams.length > 0)
+        ? stageData.umlDiagrams
+        : generateDefaultUmlSuite(project.name || 'Proyecto', {
+            tasks: stageData.tasks || [],
+            phases: stageData.phases || []
+          })
+      fs.writeFileSync(path.join(seqDir, 'uml-diagrams.json'), JSON.stringify(execUml, null, 2), 'utf-8')
       compileAgentContext(projectRoot)
       project.stage = 'ready'
       project.progress = 100
@@ -1023,12 +1065,27 @@ export function scaffoldGenesis(projectRoot, genesisPayload) {
   ]).map(normalizeQualityGate)
   fs.writeFileSync(path.join(govDir, 'quality-gates.json'), JSON.stringify(gatesData, null, 2), 'utf-8')
 
-  // 13. sequences/sequences.json & state-machines.json
+  // 13. sequences/sequences.json, state-machines.json & uml-diagrams.json (Suite Completa 14 OMG UML)
   const seqList = Array.isArray(genesisPayload.sequences) ? genesisPayload.sequences : (genesisPayload.sequences ? [genesisPayload.sequences] : [])
   fs.writeFileSync(path.join(seqDir, 'sequences.json'), JSON.stringify(seqList, null, 2), 'utf-8')
   if (genesisPayload.stateMachines && genesisPayload.stateMachines.length > 0) {
     fs.writeFileSync(path.join(seqDir, 'state-machines.json'), JSON.stringify(genesisPayload.stateMachines, null, 2), 'utf-8')
   }
+
+  const umlList = (Array.isArray(genesisPayload.umlDiagrams) && genesisPayload.umlDiagrams.length > 0)
+    ? genesisPayload.umlDiagrams
+    : generateDefaultUmlSuite(proj.name || path.basename(projectRoot), {
+        architecture: genesisPayload.architecture,
+        database: genesisPayload.database,
+        tables: rawTables,
+        relationships: rawRels,
+        personas: actorsData,
+        stories: stories,
+        userFlows: userFlows,
+        businessFlows: businessFlows,
+        screens: genesisPayload.uiUx?.screens || []
+      })
+  fs.writeFileSync(path.join(seqDir, 'uml-diagrams.json'), JSON.stringify(umlList, null, 2), 'utf-8')
 
   // 14. ui-ux/ (screens.json, wireframes.json, design-system.json, components.json)
   fs.writeFileSync(path.join(uiDir, 'screens.json'), JSON.stringify(genesisPayload.uiUx?.screens || [], null, 2), 'utf-8')
@@ -1318,7 +1375,7 @@ FORMATO JSON ESPERADO EN ESTA ETAPA (bloque \`\`\`json):
 
     case 'architecture':
       return `
-ETAPA ACTIVA: 5/6 — "ARCHITECTURE: TOPOLOGÍA C4, STACK, BASE DE DATOS ERD Y SECUENCIAS UML"
+ETAPA ACTIVA: 5/6 — "ARCHITECTURE: TOPOLOGÍA C4, STACK, BASE DE DATOS ERD Y SUITE UML (14 MODELOS OMG)"
 Tu objetivo de ingeniería en esta etapa:
 - Definir el stack tecnológico recomendado ("stack": Frontend, Backend, Base de Datos, Auth).
 - Diseñar la topología técnica de servicios C4 ("services").
@@ -1327,8 +1384,8 @@ Tu objetivo de ingeniería en esta etapa:
 - Generar el diagrama de secuencia UML en Mermaid.js ("sequenceUml") con actores, frontend, backend y base de datos.
 - En tu texto conversacional en Markdown:
   * Explica las decisiones técnicas tomadas, justificando la elección de base de datos y arquitectura desacoplada.
-  * Presenta el diagrama de secuencia y las entidades principales.
-  * Invita al usuario a validar la propuesta técnica para proceder al plan final de ejecución.
+  * Destaca que la suite completa de 14 diagramas UML oficial OMG (7 Estructurales: Clases, Objetos, Componentes, Despliegue, Paquetes, Estructura Compuesta, Perfiles; y 7 de Comportamiento: Casos de Uso, Actividades, Estados, Secuencias, Comunicación, Tiempo, Visión Global) se está sintetizando en vivo a partir de las entidades, actores y tablas conversadas.
+  * Invita al usuario a explorar la pestaña "Suite UML (14)" en el panel interactivo y validar la propuesta técnica para proceder al plan final de ejecución.
 FORMATO JSON ESPERADO EN ESTA ETAPA (bloque \`\`\`json):
 {
   "stage": "architecture",
@@ -1367,7 +1424,7 @@ Tu objetivo de ingeniería en esta etapa:
 - Establecer las compuertas de calidad ("qualityGates") que garantizarán la convergencia del 100%.
 - En tu texto conversacional en Markdown:
   * Presenta el RESUMEN EJECUTIVO de toda la planificación con las 12 perspectivas de SDD listas.
-  * Felicita al usuario por haber completado una especificación rigurosa antes de codificar.
+  * Confirma con orgullo que la suite completa de 14 diagramas UML ya ha sido sintetizada por la IA durante el diálogo y quedará automáticamente compilada en .sdd/sequences/uml-diagrams.json al pulsar Aprobar.
   * Declara que la especificación está 100% LISTA PARA COMPILAR Y ABRIR LA CABINA DE CONTROL.
 FORMATO JSON ESPERADO EN ESTA ETAPA (bloque \`\`\`json):
 {

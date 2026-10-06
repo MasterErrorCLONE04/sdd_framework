@@ -35,6 +35,7 @@ import {
   updateGenesisStepper,
   advanceStageFromChat,
   switchPreviewTab,
+  selectChatUmlDiagram,
   sendQuickAction
 } from './chat.js';
 import { renderHeader, renderCore, toggleGate, toggleConstitutionPrinciple } from './views/core.js';
@@ -130,6 +131,7 @@ window.triggerLiveCockpitMorph = triggerLiveCockpitMorph;
 window.updateGenesisStepper = updateGenesisStepper;
 window.advanceStageFromChat = advanceStageFromChat;
 window.switchPreviewTab = switchPreviewTab;
+window.selectChatUmlDiagram = selectChatUmlDiagram;
 window.sendQuickAction = sendQuickAction;
 window.toggleGate = toggleGate;
 window.setDiscoveryFilter = setDiscoveryFilter;
